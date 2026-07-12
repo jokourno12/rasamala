@@ -1,5 +1,10 @@
+param(
+    [switch]$OperatingSystem
+)
+
 #Support
 . $PSScriptRoot\Helpers\Banner.ps1
+. $PSScriptRoot\Helpers\OperatingSystem.ps1
 
 function showBanner {
     helperBanner
@@ -7,4 +12,11 @@ function showBanner {
 
 showBanner
 
-Write-Host "Hello World"
+if ($OperatingSystem){
+	helperOperatingSystem
+}
+
+
+
+
+
