@@ -10,7 +10,7 @@ $banner =
                   v1.0
               S2025110106
 =======================================
-     [ SECURITY OBSERVATION TOOL ]
+       [ SECURITY ENDPOINT TOOL ]
                TANGERANG
               2026 - 2027
 =======================================                                               
