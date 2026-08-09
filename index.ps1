@@ -7,16 +7,24 @@ param(
     [switch]$CheckingNetworkPorts,
     [switch]$CheckingRemoteSession,
     [switch]$CheckingOutboundConnection,
+
     [switch]$EndpointMetric,
+
     [switch]$AqlMonitoring,
     [switch]$F5Reset,
 
+    [switch]$SlaInfo,
+
     [ValidateSet(7, 14, 28, 42)]
-    [int]$InitialInterval = 7
+    [int]$InitialInterval = 7,
+
+    [ValidateSet('All', 'Taspen', 'Pertamina')]
+    [string]$Client = 'All'
 )
 
 #Support
 . $PSScriptRoot\Helpers\Banner.ps1
+. $PSScriptRoot\Helpers\SlaInfo.ps1
 . $PSScriptRoot\Routes\Audit.ps1
 . $PSScriptRoot\Routes\Operation.ps1
 . $PSScriptRoot\Routes\Remediation.ps1
@@ -69,3 +77,8 @@ if ($F5Reset){
     routeF5Reset
 }
 
+# Information
+if ($SlaInfo){
+    helperSlaInfo -Client $Client
+    exit
+}
