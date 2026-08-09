@@ -163,7 +163,6 @@ if ($AqlMonitoring){
             }
         }
         finally {
-berhasil didapatkan
             if ($alarmThread) {
                 $alarmThread.Stop()
                 $alarmThread.Dispose()
