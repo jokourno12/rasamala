@@ -37,6 +37,8 @@ function controlAqlMonitoring{
     while ($true) {
         Clear-Host
 
+	helperBanner
+
         Write-Host "==========================================================" -ForegroundColor Cyan
         Write-Host "              AQL STATISTICAL DEEP MONITORING              " -ForegroundColor Yellow
         Write-Host "==========================================================" -ForegroundColor Cyan
