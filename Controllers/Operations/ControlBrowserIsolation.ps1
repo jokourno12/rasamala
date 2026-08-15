@@ -99,17 +99,36 @@ function controlBrowserIsolation{
         New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
         $tempDirectories += $tempDir
 
-        # --- TIMER SELF-DESTRUCT (BACKGROUND WORKER) ---
-        $timeoutSeconds = 60 # Set 60 detik untuk uji coba (Ubah ke 43200 untuk 12 jam nantinya)
-        $timerScript = "Start-Sleep -Seconds $timeoutSeconds; if (Test-Path '$tempDir') { Remove-Item -Path '$tempDir' -Recurse -Force -ErrorAction SilentlyContinue }"
-        
+        # --- TIMER SELF-DESTRUCT (BACKGROUND POLLING VIA ENCODED COMMAND) ---
+        $timeoutSeconds = 7
+        $folderName = Split-Path $tempDir -Leaf
+
+        $scriptBlockText = @"
+`$ErrorActionPreference = 'SilentlyContinue'
+while (`$true) {
+    Start-Sleep -Seconds $timeoutSeconds
+    
+    `$active = Get-CimInstance Win32_Process | Where-Object { `$_.CommandLine -like '*$folderName*' }
+    
+    if (-not `$active) {
+        if (Test-Path '$tempDir') {
+            cmd.exe /c rmdir /s /q "$tempDir" 2> `$null
+        }
+        break
+    }
+}
+"@
+
+        $bytes = [System.Text.Encoding]::Unicode.GetBytes($scriptBlockText)
+        $encodedCommand = [Convert]::ToBase64String($bytes)
+
         try {
             if ($IsWindows) {
-                Start-Process powershell.exe -ArgumentList "-NoProfile -WindowStyle Hidden -Command `"$timerScript`"" -WindowStyle Hidden
+                 Start-Process cmd.exe -ArgumentList "/c start /b powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -EncodedCommand $encodedCommand" -WindowStyle Hidden
             } else {
-                Start-Process pwsh -ArgumentList "-NoProfile -Command `"$timerScript`""
+                 Write-Warning "Background Polling (Encoded) diformat untuk Windows."
             }
-            Write-Host "      [+] Timer Self-Destruct (1 Menit) aktif untuk folder: $tempDir" -ForegroundColor DarkGray
+            Write-Host "      [+] Timer Polling Base64 (Cek setiap $timeoutSeconds detik) aktif untuk: $folderName" -ForegroundColor DarkGray
         }
         catch {
             Write-Warning "Gagal memasang Timer Background pada $($browser.Name)"
