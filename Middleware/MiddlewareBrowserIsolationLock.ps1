@@ -116,6 +116,11 @@ function middlewareBrowserIsolationLock{
 
             # Menahan eksekusi skrip sampai form overlay ditutup
             $overlay.ShowDialog() | Out-Null
+            $overlay.Dispose()
+
+            while ([System.Console]::KeyAvailable) {
+                $null = [System.Console]::ReadKey($true)
+            }
             # ----------------------------------------
             
             Write-Host "[v] PIN Benar. Tirai dibuka kembali." -ForegroundColor Green
