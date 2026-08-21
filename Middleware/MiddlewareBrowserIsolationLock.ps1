@@ -47,9 +47,37 @@ function middlewareBrowserIsolationLock{
             $overlay.BackColor = 'Black'
             $overlay.Opacity = 0.85 # 85% Gelap, browser masih remang-remang di belakang
 
+            # --- TAMBAHAN: BLOKIR ALT+F4 ---
+            $overlay.Add_FormClosing({
+                param($sender, $e)
+                # Jika DialogResult bukan OK (berarti tombol tutup ditekan, bukan karena PIN benar),
+                # maka batalkan perintah penutupan (Cancel).
+                if ($overlay.DialogResult -ne [System.Windows.Forms.DialogResult]::OK) {
+                    $e.Cancel = $true
+                }
+            })
+
+            # Opsional: Agar tidak bisa ditutup via klik kanan di Taskbar
+            $overlay.ShowInTaskbar = $false 
+            # ------------------------------
+
+            # Tambahkan PictureBox
+            $imagePath = Join-Path (Split-Path $PSScriptRoot) "Helpers\rasamala-lock.png"
+            $pictureBox = New-Object System.Windows.Forms.PictureBox
+            $pictureBox.ImageLocation = $imagePath
+            $pictureBox.SizeMode = [System.Windows.Forms.PictureBoxSizeMode]::Zoom 
+            $pictureBox.Size = New-Object System.Drawing.Size(120, 120)
+                
+            # --- PERBAIKAN: Hitung posisi secara bertahap agar tidak terjadi error [System.Object[]] ---
+            $screenWidth = [int][System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Width
+            $posX = [int](($screenWidth / 2) - 60)
+            $pictureBox.Location = New-Object System.Drawing.Point($posX, 150)
+                
+            $overlay.Controls.Add($pictureBox)
+
             # Label "BROWSER LOCKED"
             $lbl = New-Object System.Windows.Forms.Label
-            $lbl.Text = "BROWSER LOCKED`nMasukkan PIN Sesi Anda"
+            $lbl.Text = "BROWSER LOCKED`nby S2025110106`nInput Session PIN"
             $lbl.Font = New-Object System.Drawing.Font("Consolas", 28, [System.Drawing.FontStyle]::Bold)
             $lbl.ForeColor = 'Red'
             $lbl.Dock = 'Top'
@@ -77,7 +105,7 @@ function middlewareBrowserIsolationLock{
                         $overlay.Close()
                     } else {
                         # PIN Salah: Kosongkan kolom dan beri peringatan
-                        $lbl.Text = "PIN SALAH!`nCoba lagi"
+                        $lbl.Text = "WRONG PIN!`nTry Again"
                         $txtPin.Text = ""
                     }
                 }
