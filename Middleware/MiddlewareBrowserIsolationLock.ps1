@@ -1,5 +1,7 @@
+. $PSScriptRoot\..\Config\Windows.ps1
+
 function middlewareBrowserIsolationLock{
-    Write-Host "[+] Mengaktifkan Sistem Pengaman Sesi (In-App Lock)..." -ForegroundColor Yellow
+    Write-Host "[+] Mengaktifkan Sistem Pengaman Sesi (In-App Lock)..." @Net
     
     # 1. Memuat Modul Sensor & Modul Grafis (GUI)
     try {
@@ -18,7 +20,7 @@ function middlewareBrowserIsolationLock{
     } catch { }
 
     $sessionPin = "1234" 
-    Write-Host "    [i] PIN Sesi: $sessionPin (Tekan 'Alt + J' untuk mengunci)" -ForegroundColor DarkGray
+    Write-Host "    [i] PIN Sesi: $sessionPin (Tekan 'Alt + J' untuk mengunci)" @Dim
 
     $VK_MENU = 0x12
     $VK_J = 0x4A
@@ -37,7 +39,7 @@ function middlewareBrowserIsolationLock{
         # Jika Alt + J ditekan
         if ($alt_pressed -and $j_pressed -and -not $isLocked) {
             $isLocked = $true
-            Write-Host "`n[!] Sesi Dikunci! Menampilkan Overlay..." -ForegroundColor Red
+            Write-Host "`n[!] Sesi Dikunci! Menampilkan Overlay..." @Pen
             
             # --- MEMBANGUN LAYAR PENUTUP (OVERLAY) ---
             $overlay = New-Object System.Windows.Forms.Form
@@ -123,7 +125,7 @@ function middlewareBrowserIsolationLock{
             }
             # ----------------------------------------
             
-            Write-Host "[v] PIN Benar. Tirai dibuka kembali." -ForegroundColor Green
+            Write-Host "[v] PIN Benar. Tirai dibuka kembali." @App
             $isLocked = $false
             Start-Sleep -Seconds 1 # Jeda agar tidak langsung terkunci ganda
         }

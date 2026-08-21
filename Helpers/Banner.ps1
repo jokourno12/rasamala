@@ -1,3 +1,5 @@
+. "$PSScriptRoot/../Config/Windows.ps1"
+
 function helperBanner {
 $banner =
 "                      
@@ -16,7 +18,7 @@ $banner =
 =======================================                                               
 "
 
-Write-Host $banner
+Write-Host $banner @App
 
 }
 
