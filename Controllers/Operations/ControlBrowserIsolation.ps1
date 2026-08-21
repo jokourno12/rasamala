@@ -1,3 +1,5 @@
+. $PSScriptRoot\..\..\Middleware\MiddlewareBrowserIsolationLock.ps1
+
 function controlBrowserIsolation{
     Write-Host "[*] Mempersiapkan Ruang Steril (Multi-Browser Isolation)..." -ForegroundColor Cyan
 
@@ -167,6 +169,8 @@ while (`$true) {
             Write-Warning "Gagal meluncurkan $($browser.Name): $_"
         }
     }
+
+    middlewareBrowserIsolationLock
 
     # 4. Tahan Sesi Sampai Semua Browser Tertutup
     Write-Host "[+] Menunggu SELURUH browser ditutup sebelum pembersihan..." -ForegroundColor Yellow
