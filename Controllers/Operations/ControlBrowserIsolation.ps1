@@ -1,13 +1,14 @@
 . $PSScriptRoot\..\..\Middleware\MiddlewareBrowserIsolationLock.ps1
+. $PSScriptRoot\..\..\Config\Windows.ps1
 
 function controlBrowserIsolation{
-    Write-Host "[*] Mempersiapkan Ruang Steril (Multi-Browser Isolation)..." -ForegroundColor Cyan
+    Write-Host "[*] Mempersiapkan Ruang Steril (Multi-Browser Isolation)..." @Net
 
     # 0. Self-Healing: Bersihkan folder Rasamala_* sisa crash/mati listrik sebelumnya
     $systemTemp = [System.IO.Path]::GetTempPath()
     $staleFolders = Get-ChildItem -Path $systemTemp -Filter "Rasamala_*" -Directory -ErrorAction SilentlyContinue
     if ($staleFolders) {
-        Write-Host "  [!] Menemukan $($staleFolders.Count) folder sesi lama. Membersihkan..." -ForegroundColor Yellow
+        Write-Host "  [!] Menemukan $($staleFolders.Count) folder sesi lama. Membersihkan..." @Pen
         foreach ($folder in $staleFolders) {
             Remove-Item -Path $folder.FullName -Recurse -Force -ErrorAction SilentlyContinue
         }
@@ -130,7 +131,7 @@ while (`$true) {
             } else {
                  Write-Warning "Background Polling (Encoded) diformat untuk Windows."
             }
-            Write-Host "      [+] Timer Polling Base64 (Cek setiap $timeoutSeconds detik) aktif untuk: $folderName" -ForegroundColor DarkGray
+            Write-Host "      [+] Timer Polling Base64 (Cek setiap $timeoutSeconds detik) aktif untuk: $folderName"
         }
         catch {
             Write-Warning "Gagal memasang Timer Background pada $($browser.Name)"
@@ -163,7 +164,7 @@ while (`$true) {
         try {
             $process = Start-Process -FilePath $browser.Path -ArgumentList $browserArgs -PassThru -NoNewWindow
             $activeProcesses += $process
-            Write-Host "      > $($browser.Name) diluncurkan (PID: $($process.Id))" -ForegroundColor DarkGray
+            Write-Host "      > $($browser.Name) diluncurkan (PID: $($process.Id))"
         }
         catch {
             Write-Warning "Gagal meluncurkan $($browser.Name): $_"
@@ -173,7 +174,7 @@ while (`$true) {
     middlewareBrowserIsolationLock
 
     # 4. Tahan Sesi Sampai Semua Browser Tertutup
-    Write-Host "[+] Menunggu SELURUH browser ditutup sebelum pembersihan..." -ForegroundColor Yellow
+    Write-Host "[+] Menunggu SELURUH browser ditutup sebelum pembersihan..." @Cha
     try {
         if ($activeProcesses.Count -gt 0) {
             Wait-Process -InputObject $activeProcesses -ErrorAction SilentlyContinue
@@ -184,10 +185,10 @@ while (`$true) {
     }
 
     # 5. Pembersihan Otomatis (Cleanup Normal)
-    Write-Host "[*] Semua browser telah ditutup. Menghancurkan seluruh jejak sesi..." -ForegroundColor Cyan
+    Write-Host "[*] Semua browser telah ditutup. Menghancurkan seluruh jejak sesi..." @Pen
     Start-Sleep -Seconds 3 
     foreach ($dir in $tempDirectories) {
         Remove-Item -Path $dir -Recurse -Force -ErrorAction SilentlyContinue
     }
-    Write-Host "[v] Sesi steril berhasil dihancurkan." -ForegroundColor Green
+    Write-Host "[v] Sesi steril berhasil dihancurkan." @App
 }
