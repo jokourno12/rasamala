@@ -1,4 +1,4 @@
-#Theme
+#GLOBAL THEMES
 $Pen = @{ ForegroundColor = 'Red' }
 # Kritis, Error, & Tindakan Destruktif (misal: Force Cleanup / Sesi Crash)
 
@@ -16,3 +16,17 @@ $Cha = @{ ForegroundColor = 'DarkYellow' }
 
 $Dim = @{ ForegroundColor = 'DarkGray' }
 # Detail Teknis, Instruksi Minor, & Teks Background (Tidak mendominasi visual)
+
+
+#GLOBAL TIMES
+$TimePollingNormalSec = 7
+# Interval polling rutin (cth: cek folder temp)
+
+$TimeCleanupDelaySec  = 3
+# Jeda waktu sebelum pembersihan/penghapusan file
+
+$TimeSessionLockMs    = 200
+# Interval sensor pengawasan keyboard/mouse (In-App Lock)
+
+$TimeAqlMultiplier    = 60
+# Pengali konversi AQL interval (menit ke detik)

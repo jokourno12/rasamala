@@ -103,7 +103,7 @@ function controlBrowserIsolation{
         $tempDirectories += $tempDir
 
         # --- TIMER SELF-DESTRUCT (BACKGROUND POLLING VIA ENCODED COMMAND) ---
-        $timeoutSeconds = 7
+        $timeoutSeconds = $TimePollingNormalSec
         $folderName = Split-Path $tempDir -Leaf
 
         $scriptBlockText = @"
@@ -186,7 +186,7 @@ while (`$true) {
 
     # 5. Pembersihan Otomatis (Cleanup Normal)
     Write-Host "[*] Semua browser telah ditutup. Menghancurkan seluruh jejak sesi..." @Pen
-    Start-Sleep -Seconds 3 
+    Start-Sleep -Seconds $TimeCleanupDelaySec 
     foreach ($dir in $tempDirectories) {
         Remove-Item -Path $dir -Recurse -Force -ErrorAction SilentlyContinue
     }
