@@ -25,17 +25,32 @@ function middlewareBrowserIsolationLock{
     $VK_J = 0x4A
     $isLocked = $false
 
-    # Menunjuk pada berkas penanda yang dibuat oleh Deno
     $lockFile = Join-Path ([System.IO.Path]::GetTempPath()) "rasamala_session.lock"
 
     # 2. Loop Pengawasan Utama
     while ($true) {
         Start-Sleep -Milliseconds 200
 
-        # ADAPTASI DENO: Sesi In-App Lock otomatis berhenti jika Lock File dihapus oleh Deno
-        if (-not (Test-Path $lockFile)) { 
+        # --- ADAPTASI DUAL-MODE (DENO & PURE POWERSHELL) ---
+        $sessionAlive = $false
+
+        # Cek Mode 1 (Deno): Apakah Lock File eksis?
+        if (Test-Path $lockFile) {
+            $sessionAlive = $true
+        }
+        # Cek Mode 2 (Pure PS): Apakah variabel $activeProcesses (dari parent scope) memiliki PID yang masih berjalan?
+        elseif ($null -ne $activeProcesses -and $activeProcesses.Count -gt 0) {
+            $runningCount = (Get-Process -Id $activeProcesses.Id -ErrorAction SilentlyContinue).Count
+            if ($runningCount -gt 0) {
+                $sessionAlive = $true
+            }
+        }
+
+        # Jika kedua kondisi di atas gagal, berarti browser telah ditutup sepenuhnya.
+        if (-not $sessionAlive) { 
             break 
         }
+        # ---------------------------------------------------
 
         $alt_pressed = [KeySensor]::GetAsyncKeyState($VK_MENU) -band 0x8000
         $j_pressed = [KeySensor]::GetAsyncKeyState($VK_J) -band 0x8000
