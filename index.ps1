@@ -12,6 +12,7 @@ param(
     [switch]$AqlMonitoring,
     [switch]$BrowserIsolation,
     [switch]$JavaScriptRuntime,
+    [switch]$BrowserTunnel,
 
     [switch]$F5Reset,
 
@@ -86,6 +87,10 @@ if ($BrowserIsolation){
 
 if ($JavaScriptRuntime){
     routeJavaScriptRuntime
+}
+
+if ($BrowserTunnel){
+    routeBrowserTunnel
 }
 
 # Remediation
