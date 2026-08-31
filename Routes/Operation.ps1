@@ -3,7 +3,6 @@
 . $PSScriptRoot\..\Controllers\Operations\ControlBrowserIsolation.ps1
 . $PSScriptRoot\..\Controllers\Operations\ControlJavaScriptRuntime.ps1
 
-
 function routeEndpointMetric{
     controlEndpointMetric
 }

@@ -1,6 +1,8 @@
+. $PSScriptRoot\..\..\Config\Windows.ps1
+
 function controlCheckingUpdateSystem{
     if ($IsWindows) {
-        Write-Host "[Windows] Memeriksa Windows Update Agent..." -ForegroundColor Cyan
+        Write-Host "[Windows] Memeriksa Windows Update Agent..." @Net
         try {
             $session = New-Object -ComObject "Microsoft.Update.Session"
             $searcher = $session.CreateUpdateSearcher()
@@ -38,7 +40,7 @@ function controlCheckingUpdateSystem{
 
     # 2. LINUX
     elseif ($IsLinux) {
-        Write-Host "[Linux] Memeriksa Package Manager..." -ForegroundColor Cyan
+        Write-Host "[Linux] Memeriksa Package Manager..." @Net
         $pendingCount = 0
         $pkgManager = "Unknown"
         $updateDetails = @()
@@ -90,7 +92,7 @@ function controlCheckingUpdateSystem{
 
     # 3. macOS
     elseif ($IsMacOS) {
-        Write-Host "[macOS] Memeriksa Software Update CLI..." -ForegroundColor Cyan
+        Write-Host "[macOS] Memeriksa Software Update CLI..." @Net
         $output = softwareupdate -l 2>&1 | Out-String
         $updateDetails = @()
 

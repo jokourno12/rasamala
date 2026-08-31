@@ -1,5 +1,7 @@
+. $PSScriptRoot\..\..\Config\Windows.ps1
+
 function controlJavaScriptRuntime{
-    Write-Host "[Operation] Memeriksa Deno Runtime..." -ForegroundColor Cyan
+    Write-Host "[Operation] Memeriksa Deno Runtime..." @Net
 
     # 1. Deteksi karakteristik OS
     $homeDir = if ($IsWindows) { $env:USERPROFILE } else { $HOME }
@@ -12,16 +14,23 @@ function controlJavaScriptRuntime{
 
     # 2. Cek & Install dengan Progress Bar kustom
     if (-not (Test-Path $denoExe)) {
-        Write-Host "[Operation] Deno tidak ditemukan. Memulai instalasi..." -ForegroundColor Yellow
+        Write-Host "[Operation] Deno tidak ditemukan. Memulai instalasi..." @Cha
         
         $installJob = Start-Job -ScriptBlock {
+            param($winOS)
             $ProgressPreference = 'SilentlyContinue'
-            irm https://deno.land/install.ps1 | Out-String | iex *>$null
-        }
+    
+            if ($winOS) {
+                irm https://deno.land/install.ps1 | Out-String | iex *>$null
+            } else {
+                # Untuk Linux & macOS
+                /bin/sh -c "curl -fsSL https://deno.land/install.sh | sh" *>$null
+            }
+        } -ArgumentList $IsWindows
 
         $elapsed = 0
         while ($installJob.State -eq 'Running') {
-            Write-Host -NoNewline "`rInstalasi Deno Berjalan [Mohon tunggu $elapsed detik... ]" -ForegroundColor Yellow
+            Write-Host -NoNewline "`rInstalasi Deno Berjalan [Mohon tunggu $elapsed detik... ]" @Cha
             Start-Sleep -Seconds 1
             $elapsed++
         }
@@ -29,7 +38,7 @@ function controlJavaScriptRuntime{
         Receive-Job -Job $installJob | Out-Null
         Remove-Job -Job $installJob
 
-        Write-Host "`rInstalasi Deno Selesai  [Berhasil dalam $elapsed detik]        " -ForegroundColor Green
+        Write-Host "`rInstalasi Deno Selesai  [Berhasil dalam $elapsed detik]        " @App
         
         # Daftarkan ke PATH sesi menggunakan pemisah khas OS ( ; di Windows, : di Linux/macOS)
         $denoBinDir = Join-Path $homeDir ".deno/bin"
@@ -38,7 +47,7 @@ function controlJavaScriptRuntime{
 
     # Verifikasi akhir keberadaan biner Deno
     if (-not (Test-Path $denoExe)) {
-        Write-Host "`n✕ Binary Deno tidak ditemukan." -ForegroundColor Red
+        Write-Host "`n✕ Binary Deno tidak ditemukan." @Pen
         return
     }
 
@@ -46,14 +55,14 @@ function controlJavaScriptRuntime{
     $targetScript = Join-Path $PSScriptRoot "../../Helpers/Deno.js"
     
     if (Test-Path $targetScript) {
-        Write-Host "`n[Operation] Mengeksekusi modul JavaScript..." -ForegroundColor Cyan
+        Write-Host "`n[Operation] Mengeksekusi modul JavaScript..." @Net
         
         & $denoExe run --allow-all $targetScript 
         
         if ($LASTEXITCODE -ne 0) {
-            Write-Host "✕ Modul JavaScript berhenti dengan kesalahan (Exit Code: $LASTEXITCODE)." -ForegroundColor Red
+            Write-Host "✕ Modul JavaScript berhenti dengan kesalahan (Exit Code: $LASTEXITCODE)." @Pen
         }
     } else {
-        Write-Host "[-] Peringatan: File $targetScript tidak ditemukan." -ForegroundColor Yellow
+        Write-Host "[-] Peringatan: File $targetScript tidak ditemukan." @Cha
     }
 }

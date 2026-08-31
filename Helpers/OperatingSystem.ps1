@@ -1,7 +1,9 @@
+. "$PSScriptRoot/../Config/Windows.ps1"
+
 function helperOperatingSystem {
 
-    Write-Host "`n[+] Mengumpulkan Informasi Sistem Operasi..." -ForegroundColor Green
-    Write-Host "----------------------------------------" -ForegroundColor Gray
+    Write-Host "`n[+] Mengumpulkan Informasi Sistem Operasi..." @Net
+    Write-Host "----------------------------------------" @Dim
 
     # Deteksi Windows yang aman untuk semua versi PowerShell
     $ApakahWindows = $IsWindows -or ($env:OS -like "*Windows*")
@@ -30,12 +32,12 @@ function helperOperatingSystem {
     }
 
     # KELUARAN OUTPUT YANG SERAGAM
-    Write-Host " Nama OS        : " -NoNewline; Write-Host $OSName -ForegroundColor White
-    Write-Host " Versi OS       : " -NoNewline; Write-Host $OSVersion -ForegroundColor White
-    Write-Host " Build/Kernel   : " -NoNewline; Write-Host $OSBuild -ForegroundColor White
-    Write-Host " Arsitektur     : " -NoNewline; Write-Host $OSArch -ForegroundColor White
-    Write-Host " Pengguna Aktif : " -NoNewline; Write-Host $CurrentUser -ForegroundColor Yellow
-    Write-Host "----------------------------------------" -ForegroundColor Gray
+    Write-Host " Nama OS        : " -NoNewline @Dim; Write-Host $OSName
+    Write-Host " Versi OS       : " -NoNewline @Dim; Write-Host $OSVersion
+    Write-Host " Build/Kernel   : " -NoNewline @Dim; Write-Host $OSBuild
+    Write-Host " Arsitektur     : " -NoNewline @Dim; Write-Host $OSArch
+    Write-Host " Pengguna Aktif : " -NoNewline @Dim; Write-Host $CurrentUser @Cha
+    Write-Host "----------------------------------------" @Dim
 
 }
 

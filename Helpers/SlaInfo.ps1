@@ -1,3 +1,5 @@
+. "$PSScriptRoot/../Config/Windows.ps1"
+
 function helperSlaInfo {
     param([string]$Client = 'All')
 
@@ -30,15 +32,14 @@ function helperSlaInfo {
 "@
 
     if ($Client -eq 'Taspen') {
-        Write-Host $taspen -ForegroundColor Cyan
+        Write-Host $taspen @Net
     }
     elseif ($Client -eq 'Pertamina') {
-        Write-Host $pertamina -ForegroundColor Yellow
+        Write-Host $pertamina @Cha
     }
     else {
-        Write-Host $taspen -ForegroundColor Cyan
+        Write-Host $taspen @Net
         Write-Host "`n"
-        Write-Host $pertamina -ForegroundColor Yellow
+        Write-Host $pertamina @Cha
     }
 }
-

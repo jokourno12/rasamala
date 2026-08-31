@@ -1,6 +1,8 @@
+. $PSScriptRoot\..\..\Config\Windows.ps1
+
 function controlCheckingNetworkPorts{
     if ($IsWindows) {
-        Write-Host "[Windows] Memeriksa Listening Ports TCP..." -ForegroundColor Cyan
+        Write-Host "[Windows] Memeriksa Listening Ports TCP..." @Net
         try {
             # Menggunakan Get-NetTCPConnection (PowerShell native)
             $connections = Get-NetTCPConnection -State Listen -ErrorAction Stop
@@ -25,7 +27,7 @@ function controlCheckingNetworkPorts{
         }
     }
     elseif ($IsLinux) {
-        Write-Host "[Linux] Memeriksa Listening Ports TCP (ss)..." -ForegroundColor Cyan
+        Write-Host "[Linux] Memeriksa Listening Ports TCP (ss)..." @Net
         $ports = @()
         if (Get-Command ss -ErrorAction SilentlyContinue) {
             # Parsing output dari ss (Socket Statistics)
@@ -49,7 +51,7 @@ function controlCheckingNetworkPorts{
         }
     }
     elseif ($IsMacOS) {
-        Write-Host "[macOS] Memeriksa Listening Ports TCP (lsof)..." -ForegroundColor Cyan
+        Write-Host "[macOS] Memeriksa Listening Ports TCP (lsof)..." @Net
         $ports = @()
         if (Get-Command lsof -ErrorAction SilentlyContinue) {
             # Menjalankan lsof untuk mencari TCP LISTEN dan mencegah resolusi DNS (-n)

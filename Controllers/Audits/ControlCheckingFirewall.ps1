@@ -1,7 +1,9 @@
+. $PSScriptRoot\..\..\Config\Windows.ps1
+
 function controlCheckingFirewall{
     # 1. WINDOWS (Windows Defender Firewall)
     if ($IsWindows) {
-        Write-Host "[Windows] Memeriksa Windows Defender Firewall..." -ForegroundColor Cyan
+        Write-Host "[Windows] Memeriksa Windows Defender Firewall..." @Net
         try {
             $profiles = Get-NetFirewallProfile -ErrorAction Stop
             # Mencari profil yang dimatikan (biasanya nilainya bernilai false atau enum 2)
@@ -41,7 +43,7 @@ function controlCheckingFirewall{
 
     # 2. LINUX (UFW / Firewalld)
     elseif ($IsLinux) {
-        Write-Host "[Linux] Memeriksa status UFW/Firewalld..." -ForegroundColor Cyan
+        Write-Host "[Linux] Memeriksa status UFW/Firewalld..." @Net
         $status = $false
         $fwType = "Unknown"
         $msg = "Layanan Firewall tidak terdeteksi di sistem."
@@ -87,7 +89,7 @@ function controlCheckingFirewall{
 
     # 3. macOS (Application Layer Firewall)
     elseif ($IsMacOS) {
-        Write-Host "[macOS] Memeriksa Application Layer Firewall (ALF)..." -ForegroundColor Cyan
+        Write-Host "[macOS] Memeriksa Application Layer Firewall (ALF)..." @Net
         $fwType = "ALF"
         $alfPath = "/usr/libexec/ApplicationFirewall/socketfilterfw"
         

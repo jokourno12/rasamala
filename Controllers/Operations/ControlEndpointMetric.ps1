@@ -1,12 +1,14 @@
+. $PSScriptRoot\..\..\Config\Windows.ps1
+
 function controlEndpointMetric{
     # 1. Bersihkan layar dan tampilkan banner SEKALI SAJA di awal
     Clear-Host
     showBanner 
     
-    Write-Host "`n=== LIVE ENDPOINT METRICS ===" -ForegroundColor Cyan
+    Write-Host "`n=== LIVE ENDPOINT METRICS ===" @Net
     # Menambahkan kolom Net_Status (Jaringan)
-    Write-Host "Timestamp            CPU_Usage   RAM_Usage   Active_Conn Net_Status" -ForegroundColor Yellow
-    Write-Host "---------            ---------   ---------   ----------- ----------" -ForegroundColor Yellow
+    Write-Host "Timestamp            CPU_Usage   RAM_Usage   Active_Conn Net_Status" @Cha
+    Write-Host "---------            ---------   ---------   ----------- ----------" @Cha
 
     # 2. Simpan posisi baris kursor saat ini (tempat data akan ditulis)
     $dataRowPosition = [Console]::CursorTop
@@ -62,7 +64,7 @@ function controlEndpointMetric{
 
             # Tulis pesan informasi di bawahnya
             [Console]::SetCursorPosition(0, $dataRowPosition + 2)
-            Write-Host "Memperbarui data setiap 2 detik... (Tekan Ctrl+C untuk keluar)" -ForegroundColor DarkGray
+            Write-Host "Memperbarui data setiap 2 detik... (Tekan Ctrl+C untuk keluar)" @Dim
             
             # Jeda 2 detik
             Start-Sleep -Seconds 2
@@ -70,7 +72,7 @@ function controlEndpointMetric{
     }
     finally {
         [Console]::CursorVisible = $true
-        Write-Host "`n`nLive Monitoring dihentikan." -ForegroundColor Red
+        Write-Host "`n`nLive Monitoring dihentikan." @Pen
         if ($pingT) { $pingT.Dispose() } # Bersihkan memori ping
     }
 }

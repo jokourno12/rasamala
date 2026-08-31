@@ -1,7 +1,9 @@
+. $PSScriptRoot\..\..\Config\Windows.ps1
+
 function controlCheckingDiskEncryption{
     # 1. WINDOWS (BitLocker)
     if ($IsWindows) {
-        Write-Host "[Windows] Memeriksa status BitLocker..." -ForegroundColor Cyan
+        Write-Host "[Windows] Memeriksa status BitLocker..." @Net
         try {
             $osDrive = $env:SystemDrive
             $isEncrypted = $false
@@ -44,7 +46,7 @@ function controlCheckingDiskEncryption{
 
     # 2. LINUX (LUKS)
     elseif ($IsLinux) {
-        Write-Host "[Linux] Memeriksa status LUKS Encryption..." -ForegroundColor Cyan
+        Write-Host "[Linux] Memeriksa status LUKS Encryption..." @Net
         $isEncrypted = $false
         $message = "LUKS tidak terdeteksi."
 
@@ -70,7 +72,7 @@ function controlCheckingDiskEncryption{
 
     # 3. macOS (FileVault)
     elseif ($IsMacOS) {
-        Write-Host "[macOS] Memeriksa status FileVault..." -ForegroundColor Cyan
+        Write-Host "[macOS] Memeriksa status FileVault..." @Net
         $isEncrypted = $false
         $message = ""
 
