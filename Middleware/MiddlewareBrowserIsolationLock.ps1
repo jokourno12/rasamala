@@ -14,7 +14,6 @@ function middlewareBrowserIsolationLock{
         }
 '@ -ErrorAction SilentlyContinue
         
-        # Load .NET Forms & Drawing untuk membuat Layar Penutup
         Add-Type -AssemblyName System.Windows.Forms
         Add-Type -AssemblyName System.Drawing
     } catch { }
@@ -26,12 +25,32 @@ function middlewareBrowserIsolationLock{
     $VK_J = 0x4A
     $isLocked = $false
 
+    $lockFile = Join-Path ([System.IO.Path]::GetTempPath()) "rasamala_session.lock"
+
     # 2. Loop Pengawasan Utama
     while ($true) {
         Start-Sleep -Milliseconds 200
 
-        $runningCount = (Get-Process -Id $activeProcesses.Id -ErrorAction SilentlyContinue).Count
-        if ($runningCount -eq 0) { break }
+        # --- ADAPTASI DUAL-MODE (DENO & PURE POWERSHELL) ---
+        $sessionAlive = $false
+
+        # Cek Mode 1 (Deno): Apakah Lock File eksis?
+        if (Test-Path $lockFile) {
+            $sessionAlive = $true
+        }
+        # Cek Mode 2 (Pure PS): Apakah variabel $activeProcesses (dari parent scope) memiliki PID yang masih berjalan?
+        elseif ($null -ne $activeProcesses -and $activeProcesses.Count -gt 0) {
+            $runningCount = (Get-Process -Id $activeProcesses.Id -ErrorAction SilentlyContinue).Count
+            if ($runningCount -gt 0) {
+                $sessionAlive = $true
+            }
+        }
+
+        # Jika kedua kondisi di atas gagal, berarti browser telah ditutup sepenuhnya.
+        if (-not $sessionAlive) { 
+            break 
+        }
+        # ---------------------------------------------------
 
         $alt_pressed = [KeySensor]::GetAsyncKeyState($VK_MENU) -band 0x8000
         $j_pressed = [KeySensor]::GetAsyncKeyState($VK_J) -band 0x8000
@@ -47,21 +66,17 @@ function middlewareBrowserIsolationLock{
             $overlay.WindowState = 'Maximized'
             $overlay.TopMost = $true
             $overlay.BackColor = 'Black'
-            $overlay.Opacity = 0.85 # 85% Gelap, browser masih remang-remang di belakang
+            $overlay.Opacity = 0.85 
 
-            # --- TAMBAHAN: BLOKIR ALT+F4 ---
+            # --- BLOKIR ALT+F4 ---
             $overlay.Add_FormClosing({
                 param($sender, $e)
-                # Jika DialogResult bukan OK (berarti tombol tutup ditekan, bukan karena PIN benar),
-                # maka batalkan perintah penutupan (Cancel).
                 if ($overlay.DialogResult -ne [System.Windows.Forms.DialogResult]::OK) {
                     $e.Cancel = $true
                 }
             })
 
-            # Opsional: Agar tidak bisa ditutup via klik kanan di Taskbar
             $overlay.ShowInTaskbar = $false 
-            # ------------------------------
 
             # Tambahkan PictureBox
             $imagePath = Join-Path (Split-Path $PSScriptRoot) "Helpers\rasamala-lock.png"
@@ -70,7 +85,6 @@ function middlewareBrowserIsolationLock{
             $pictureBox.SizeMode = [System.Windows.Forms.PictureBoxSizeMode]::Zoom 
             $pictureBox.Size = New-Object System.Drawing.Size(120, 120)
                 
-            # --- PERBAIKAN: Hitung posisi secara bertahap agar tidak terjadi error [System.Object[]] ---
             $screenWidth = [int][System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Width
             $posX = [int](($screenWidth / 2) - 60)
             $pictureBox.Location = New-Object System.Drawing.Point($posX, 150)
@@ -93,7 +107,6 @@ function middlewareBrowserIsolationLock{
             $txtPin.PasswordChar = '*'
             $txtPin.Width = 200
             $txtPin.Top = 450
-            # Posisi rata tengah secara dinamis
             $txtPin.Left = ([System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Width / 2) - 100
             $txtPin.TextAlign = 'Center'
             $overlay.Controls.Add($txtPin)
@@ -102,32 +115,27 @@ function middlewareBrowserIsolationLock{
             $txtPin.Add_KeyDown({
                 if ($_.KeyCode -eq 'Enter') {
                     if ($txtPin.Text -eq $sessionPin) {
-                        # PIN Benar: Tutup overlay
                         $overlay.DialogResult = [System.Windows.Forms.DialogResult]::OK
                         $overlay.Close()
                     } else {
-                        # PIN Salah: Kosongkan kolom dan beri peringatan
                         $lbl.Text = "WRONG PIN!`nTry Again"
                         $txtPin.Text = ""
                     }
                 }
             })
 
-            # Fokus kursor otomatis ke kolom PIN saat layar muncul
             $overlay.Add_Shown({ $txtPin.Focus() })
 
-            # Menahan eksekusi skrip sampai form overlay ditutup
             $overlay.ShowDialog() | Out-Null
             $overlay.Dispose()
 
             while ([System.Console]::KeyAvailable) {
                 $null = [System.Console]::ReadKey($true)
             }
-            # ----------------------------------------
             
             Write-Host "[v] PIN Benar. Tirai dibuka kembali." @App
             $isLocked = $false
-            Start-Sleep -Seconds 1 # Jeda agar tidak langsung terkunci ganda
+            Start-Sleep -Seconds 1 
         }
     }
 }
