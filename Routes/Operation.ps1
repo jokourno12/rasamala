@@ -2,6 +2,7 @@
 . $PSScriptRoot\..\Controllers\Operations\ControlAqlMonitoring.ps1
 . $PSScriptRoot\..\Controllers\Operations\ControlBrowserIsolation.ps1
 . $PSScriptRoot\..\Controllers\Operations\ControlJavaScriptRuntime.ps1
+. $PSScriptRoot\..\Controllers\Operations\ControlBrowserTunnel.ps1
 
 function routeEndpointMetric{
     controlEndpointMetric
@@ -17,4 +18,8 @@ function routeBrowserIsolation{
 
 function routeJavaScriptRuntime{
     controlJavaScriptRuntime
+}
+
+function routeBrowserTunnel{
+    controlBrowserTunnel
 }
