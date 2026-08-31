@@ -1,12 +1,14 @@
+. $PSScriptRoot\..\..\Config\Windows.ps1
+
 function controlCheckingOutboundConnection{
-    Write-Host "`n[*] Memulai Audit Outbound Connections..." -ForegroundColor Yellow
+    Write-Host "`n[*] Memulai Audit Outbound Connections..." @Cha
         $outboundConns = @()
 
         # ==========================================
         # 1. WINDOWS: Menggunakan Get-NetTCPConnection
         # ==========================================
         if ($IsWindows) {
-            Write-Host "[+] Menjalankan modul OS: WINDOWS" -ForegroundColor Cyan
+            Write-Host "[+] Menjalankan modul OS: WINDOWS" @Net
             
             # Ambil semua koneksi TCP yang ESTABLISHED
             $tcpConns = Get-NetTCPConnection -State Established -ErrorAction SilentlyContinue
@@ -35,7 +37,7 @@ function controlCheckingOutboundConnection{
         # 2. LINUX: Menggunakan utilitas 'ss'
         # ==========================================
         elseif ($IsLinux) {
-            Write-Host "[+] Menjalankan modul OS: LINUX" -ForegroundColor Cyan
+            Write-Host "[+] Menjalankan modul OS: LINUX" @Net
             
             # ss -ntp (Numeric, TCP, Processes)
             $ssOutput = ss -ntp state established 2>$null
@@ -73,7 +75,7 @@ function controlCheckingOutboundConnection{
         # 3. MACOS: Menggunakan utilitas 'lsof'
         # ==========================================
         elseif ($IsMacOS) {
-            Write-Host "[+] Menjalankan modul OS: MACOS" -ForegroundColor Cyan
+            Write-Host "[+] Menjalankan modul OS: MACOS" @Net
             
             # lsof -iTCP -sTCP:ESTABLISHED
             $lsofOutput = lsof -iTCP -sTCP:ESTABLISHED -n -P 2>$null

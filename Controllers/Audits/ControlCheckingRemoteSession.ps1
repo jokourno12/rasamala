@@ -1,12 +1,14 @@
+. $PSScriptRoot\..\..\Config\Windows.ps1
+
 function controlCheckingRemoteSession{
-    Write-Host "`n[*] Memulai Audit Remote Session..." -ForegroundColor Yellow
+    Write-Host "`n[*] Memulai Audit Remote Session..." @Cha
     $sessions = @()
 
     # ==========================================
     # 1. WINDOWS: Menggunakan 'quser.exe'
     # ==========================================
     if ($IsWindows) {
-        Write-Host "[+] Menjalankan modul OS: WINDOWS" -ForegroundColor Cyan
+        Write-Host "[+] Menjalankan modul OS: WINDOWS" @Net
         $quserOutput = quser.exe 2>$null
         
         if ($quserOutput -and $quserOutput.Count -gt 1) {
@@ -50,7 +52,7 @@ function controlCheckingRemoteSession{
     # ==========================================
     elseif ($IsLinux -or $IsMacOS) {
         $osName = if ($IsLinux) { "LINUX" } else { "MACOS" }
-        Write-Host "[+] Menjalankan modul OS: $osName" -ForegroundColor Cyan
+        Write-Host "[+] Menjalankan modul OS: $osName" @Net
         
         $whoOutput = who 2>$null
         

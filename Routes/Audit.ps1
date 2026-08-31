@@ -32,7 +32,6 @@ function routeCheckingRemoteSession{
     controlCheckingRemoteSession
 }
 
-
 function routeCheckingOutboundConnection{
     controlCheckingOutboundConnection
 }
