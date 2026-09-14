@@ -62,7 +62,9 @@ function controlBrowserIsolation{
         Write-Host "[*] Mempersiapkan Ruang Steril (Multi-Browser Isolation)..."
 
         # 0. Self-Healing: Bersihkan folder Rasamala_* sisa crash/mati listrik sebelumnya
-        $systemTemp = [System.IO.Path]::GetTempPath()
+        $systemTemp = [System.IO.Path]::GetFullPath([System.IO.Path]::Combine($PSScriptRoot, '..', '..', 'IsolatedSessions'))
+        if (-not (Test-Path $systemTemp)) { New-Item -ItemType Directory -Path $systemTemp -Force | Out-Null }
+
         $staleFolders = Get-ChildItem -Path $systemTemp -Filter "Rasamala_*" -Directory -ErrorAction SilentlyContinue
         if ($staleFolders) {
             Write-Host "  [!] Menemukan $($staleFolders.Count) folder sesi lama. Membersihkan..."
@@ -155,7 +157,7 @@ function controlBrowserIsolation{
 
         # 3. Luncurkan masing-masing browser dengan profil terpisah
         foreach ($browser in $foundBrowsers) {
-            $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) "Rasamala_$($browser.Name)_$(Get-Random)"
+            $tempDir = Join-Path $systemTemp "Rasamala_$($browser.Name)_$(Get-Random)"
             New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
             $tempDirectories += $tempDir
 
@@ -198,7 +200,7 @@ while (`$true) {
             $browserArgs = @()
             if ($browser.Type -eq 'Chromium') {
                 $browserArgs = @(
-                    "--user-data-dir=`"$tempDir`"", 
+                    "--user-data-dir=$tempDir", 
                     "--incognito", 
                     "--no-first-run", 
                     "--no-default-browser-check",
@@ -207,19 +209,21 @@ while (`$true) {
                     "--disable-background-networking",
                     "--disable-password-manager-reauthentication", 
                     "--disable-save-password-bubble", 
-                    "`"$TargetUrl`""
+                    $TargetUrl
                 )
             }
             elseif ($browser.Type -eq 'Firefox') {
                 $browserArgs = @(
-                    "-profile", "`"$tempDir`"", 
+                    "-profile", $tempDir, 
                     "-private-window", 
-                    "`"$TargetUrl`""
+                    $TargetUrl
                 )
             }
 
             try {
-                $process = Start-Process -FilePath $browser.Path -ArgumentList $browserArgs -PassThru -NoNewWindow
+                $outLog = Join-Path $tempDir "stdout.log"
+                $errLog = Join-Path $tempDir "stderr.log"
+                $process = Start-Process -FilePath $browser.Path -ArgumentList $browserArgs -RedirectStandardOutput $outLog -RedirectStandardError $errLog -PassThru -NoNewWindow
                 $activeProcesses += $process
                 Write-Host "      > $($browser.Name) diluncurkan (PID: $($process.Id))"
             }
