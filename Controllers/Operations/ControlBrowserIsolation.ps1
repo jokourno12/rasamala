@@ -106,15 +106,6 @@ function controlBrowserIsolation{
                         "$localApp\Microsoft\Edge\Application\msedge.exe"
                     ) 
                 }
-                @{ 
-                    Name = 'Firefox';
-                    Type = 'Firefox';  
-                    Paths = @(
-                        "C:\Program Files\Mozilla Firefox\firefox.exe", 
-                        "C:\Program Files (x86)\Mozilla Firefox\firefox.exe",
-                        "$localApp\Mozilla Firefox\firefox.exe"
-                    ) 
-                }
             )
         }
         elseif ($IsLinux) {
@@ -122,7 +113,6 @@ function controlBrowserIsolation{
                 @{ Name = 'Chrome'; Type = 'Chromium'; Paths = @('/usr/bin/google-chrome') }
                 @{ Name = 'Brave';  Type = 'Chromium'; Paths = @('/usr/bin/brave-browser', '/snap/bin/brave') }
                 @{ Name = 'Edge';   Type = 'Chromium'; Paths = @('/usr/bin/microsoft-edge') }
-                @{ Name = 'Firefox';Type = 'Firefox';  Paths = @('/usr/bin/firefox', '/snap/bin/firefox') }
             )
         }
         elseif ($IsMacOS) {
@@ -130,7 +120,6 @@ function controlBrowserIsolation{
                 @{ Name = 'Chrome'; Type = 'Chromium'; Paths = @('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome') }
                 @{ Name = 'Brave';  Type = 'Chromium'; Paths = @('/Applications/Brave Browser.app/Contents/MacOS/Brave Browser') }
                 @{ Name = 'Edge';   Type = 'Chromium'; Paths = @('/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge') }
-                @{ Name = 'Firefox';Type = 'Firefox';  Paths = @('/Applications/Firefox.app/Contents/MacOS/firefox') }
             )
         }
 
@@ -209,13 +198,6 @@ while (`$true) {
                     "--disable-background-networking",
                     "--disable-password-manager-reauthentication", 
                     "--disable-save-password-bubble", 
-                    $TargetUrl
-                )
-            }
-            elseif ($browser.Type -eq 'Firefox') {
-                $browserArgs = @(
-                    "-profile", $tempDir, 
-                    "-private-window", 
                     $TargetUrl
                 )
             }
