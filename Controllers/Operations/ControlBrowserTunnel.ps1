@@ -38,9 +38,7 @@ function controlBrowserTunnel{
     $possiblePaths = @(
         "C:\Program Files\Google\Chrome\Application\chrome.exe",
         "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-        "$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe",
-        "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-        "C:\Program Files\Microsoft\Edge\Application\msedge.exe"
+        "$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe"
     )
 
     foreach ($path in $possiblePaths) {
@@ -51,14 +49,16 @@ function controlBrowserTunnel{
     }
 
     if (-not $browserPath) {
-        Write-Host "[!] Browser (Chrome/Edge) tidak ditemukan di lokasi standar." @Pen
+        Write-Host "[!] Google Chrome tidak ditemukan di lokasi standar." @Pen
     } else {
         $tempProfile = Join-Path $env:TEMP "Rasamala_Direct_$(Get-Random)"
 
         $browserArgs = @(
             "--user-data-dir=$tempProfile",
+            "--incognito",
             "--no-proxy-server",                  
             "--no-first-run",
+            "--no-default-browser-check",
             $urlToOpen
         )
 
