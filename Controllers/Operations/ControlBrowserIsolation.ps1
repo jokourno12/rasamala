@@ -62,7 +62,9 @@ function controlBrowserIsolation{
         Write-Host "[*] Mempersiapkan Ruang Steril (Multi-Browser Isolation)..."
 
         # 0. Self-Healing: Bersihkan folder Rasamala_* sisa crash/mati listrik sebelumnya
-        $systemTemp = [System.IO.Path]::GetTempPath()
+        $systemTemp = [System.IO.Path]::GetFullPath([System.IO.Path]::Combine($PSScriptRoot, '..', '..', 'IsolatedSessions'))
+        if (-not (Test-Path $systemTemp)) { New-Item -ItemType Directory -Path $systemTemp -Force | Out-Null }
+
         $staleFolders = Get-ChildItem -Path $systemTemp -Filter "Rasamala_*" -Directory -ErrorAction SilentlyContinue
         if ($staleFolders) {
             Write-Host "  [!] Menemukan $($staleFolders.Count) folder sesi lama. Membersihkan..."
@@ -104,15 +106,6 @@ function controlBrowserIsolation{
                         "$localApp\Microsoft\Edge\Application\msedge.exe"
                     ) 
                 }
-                @{ 
-                    Name = 'Firefox';
-                    Type = 'Firefox';  
-                    Paths = @(
-                        "C:\Program Files\Mozilla Firefox\firefox.exe", 
-                        "C:\Program Files (x86)\Mozilla Firefox\firefox.exe",
-                        "$localApp\Mozilla Firefox\firefox.exe"
-                    ) 
-                }
             )
         }
         elseif ($IsLinux) {
@@ -120,7 +113,6 @@ function controlBrowserIsolation{
                 @{ Name = 'Chrome'; Type = 'Chromium'; Paths = @('/usr/bin/google-chrome') }
                 @{ Name = 'Brave';  Type = 'Chromium'; Paths = @('/usr/bin/brave-browser', '/snap/bin/brave') }
                 @{ Name = 'Edge';   Type = 'Chromium'; Paths = @('/usr/bin/microsoft-edge') }
-                @{ Name = 'Firefox';Type = 'Firefox';  Paths = @('/usr/bin/firefox', '/snap/bin/firefox') }
             )
         }
         elseif ($IsMacOS) {
@@ -128,7 +120,6 @@ function controlBrowserIsolation{
                 @{ Name = 'Chrome'; Type = 'Chromium'; Paths = @('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome') }
                 @{ Name = 'Brave';  Type = 'Chromium'; Paths = @('/Applications/Brave Browser.app/Contents/MacOS/Brave Browser') }
                 @{ Name = 'Edge';   Type = 'Chromium'; Paths = @('/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge') }
-                @{ Name = 'Firefox';Type = 'Firefox';  Paths = @('/Applications/Firefox.app/Contents/MacOS/firefox') }
             )
         }
 
@@ -155,7 +146,7 @@ function controlBrowserIsolation{
 
         # 3. Luncurkan masing-masing browser dengan profil terpisah
         foreach ($browser in $foundBrowsers) {
-            $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) "Rasamala_$($browser.Name)_$(Get-Random)"
+            $tempDir = Join-Path $systemTemp "Rasamala_$($browser.Name)_$(Get-Random)"
             New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
             $tempDirectories += $tempDir
 
@@ -198,7 +189,7 @@ while (`$true) {
             $browserArgs = @()
             if ($browser.Type -eq 'Chromium') {
                 $browserArgs = @(
-                    "--user-data-dir=`"$tempDir`"", 
+                    "--user-data-dir=$tempDir", 
                     "--incognito", 
                     "--no-first-run", 
                     "--no-default-browser-check",
@@ -207,19 +198,14 @@ while (`$true) {
                     "--disable-background-networking",
                     "--disable-password-manager-reauthentication", 
                     "--disable-save-password-bubble", 
-                    "`"$TargetUrl`""
-                )
-            }
-            elseif ($browser.Type -eq 'Firefox') {
-                $browserArgs = @(
-                    "-profile", "`"$tempDir`"", 
-                    "-private-window", 
-                    "`"$TargetUrl`""
+                    $TargetUrl
                 )
             }
 
             try {
-                $process = Start-Process -FilePath $browser.Path -ArgumentList $browserArgs -PassThru -NoNewWindow
+                $outLog = Join-Path $tempDir "stdout.log"
+                $errLog = Join-Path $tempDir "stderr.log"
+                $process = Start-Process -FilePath $browser.Path -ArgumentList $browserArgs -RedirectStandardOutput $outLog -RedirectStandardError $errLog -PassThru -NoNewWindow
                 $activeProcesses += $process
                 Write-Host "      > $($browser.Name) diluncurkan (PID: $($process.Id))"
             }
