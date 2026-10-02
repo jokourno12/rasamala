@@ -1,4 +1,4 @@
-. $PSScriptRoot\..\Helpers\OperatingSystem.ps1
+. $PSScriptRoot\..\Controllers\Audits\ControlStressTesting.ps1
 . $PSScriptRoot\..\Controllers\Audits\ControlCheckingUpdateSystem.ps1
 . $PSScriptRoot\..\Controllers\Audits\ControlCheckingDiskEncryption.ps1
 . $PSScriptRoot\..\Controllers\Audits\ControlCheckingFirewall.ps1
@@ -6,8 +6,8 @@
 . $PSScriptRoot\..\Controllers\Audits\ControlCheckingRemoteSession.ps1
 . $PSScriptRoot\..\Controllers\Audits\ControlCheckingOutboundConnection.ps1
 
-function routeOperatingSystem{
-    helperOperatingSystem
+function routeStressTesting{
+    controlStressTesting
 }
 
 function routeCheckingUpdateSystem{

@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [switch]$OperatingSystem,
+    [switch]$StressTesting,
     [switch]$CheckingUpdateSystem,
     [switch]$CheckingDiskEncryption,
     [switch]$CheckingFirewall,
@@ -44,8 +44,8 @@ function showBanner {
 
 showBanner
 # Audit
-if ($OperatingSystem){
-    routeOperatingSystem
+if ($StressTesting){
+    routeStressTesting
 }
 
 if ($CheckingUpdateSystem){
