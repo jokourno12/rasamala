@@ -4,9 +4,8 @@ param(
     [switch]$CheckingUpdateSystem,
     [switch]$CheckingDiskEncryption,
     [switch]$CheckingFirewall,
-    [switch]$CheckingNetworkPorts,
+    [switch]$CheckingNetworkConnection,
     [switch]$CheckingRemoteSession,
-    [switch]$CheckingOutboundConnection,
 
     [switch]$EndpointMetric,
     [switch]$AqlMonitoring,
@@ -60,16 +59,12 @@ if ($CheckingFirewall){
     routeCheckingFirewall
 }
 
-if ($CheckingNetworkPorts){
-    routeCheckingNetworkPorts
+if ($CheckingNetworkConnection){
+    routeCheckingNetworkConnection
 }
 
 if ($CheckingRemoteSession){
     routeCheckingRemoteSession
-}
-
-if ($CheckingOutboundConnection){
-    routeCheckingOutboundConnection
 }
 
 # Operation
