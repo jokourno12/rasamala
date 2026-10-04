@@ -1,6 +1,6 @@
 . $PSScriptRoot\..\..\Config\Windows.ps1
 
-function controlStressTesting{
+function controlProcessorStressTesting{
 Write-Host "`n[+] Mempersiapkan Beban Kerja Absolut..." -ForegroundColor Cyan
 
 $code = @"
