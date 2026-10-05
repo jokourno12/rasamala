@@ -3,7 +3,7 @@ param(
     [switch]$ProcessorStressTesting,
     [switch]$CheckingUpdateSystem,
     [switch]$StoragePerformanceTesting,
-    [switch]$CheckingFirewall,
+    [switch]$NetworkPerimeterTesting,
     [switch]$CheckingNetworkConnection,
     [switch]$CheckingRemoteSession,
 
@@ -55,8 +55,8 @@ if ($StoragePerformanceTesting){
     routeStoragePerformanceTesting
 }
 
-if ($CheckingFirewall){
-    routeCheckingFirewall
+if ($NetworkPerimeterTesting){
+    routeNetworkPerimeterTesting
 }
 
 if ($CheckingNetworkConnection){
