@@ -1,7 +1,7 @@
 . $PSScriptRoot\..\Controllers\Audits\ControlProcessorStressTesting.ps1
 . $PSScriptRoot\..\Controllers\Audits\ControlCheckingUpdateSystem.ps1
 . $PSScriptRoot\..\Controllers\Audits\ControlStoragePerformanceTesting.ps1
-. $PSScriptRoot\..\Controllers\Audits\ControlCheckingFirewall.ps1
+. $PSScriptRoot\..\Controllers\Audits\ControlNetworkPerimeterTesting.ps1
 . $PSScriptRoot\..\Controllers\Audits\ControlCheckingNetworkConnection.ps1
 . $PSScriptRoot\..\Controllers\Audits\ControlCheckingRemoteSession.ps1
 
@@ -17,8 +17,8 @@ function routeStoragePerformanceTesting{
     controlStoragePerformanceTesting
 }
 
-function routeCheckingFirewall{
-    controlCheckingFirewall
+function routeNetworkPerimeterTesting{
+    controlNetworkPerimeterTesting
 }
 
 function routeCheckingNetworkConnection{
