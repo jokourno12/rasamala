@@ -2,7 +2,7 @@
 . $PSScriptRoot\..\Controllers\Audits\ControlCheckingUpdateSystem.ps1
 . $PSScriptRoot\..\Controllers\Audits\ControlStoragePerformanceTesting.ps1
 . $PSScriptRoot\..\Controllers\Audits\ControlNetworkPerimeterTesting.ps1
-. $PSScriptRoot\..\Controllers\Audits\ControlCheckingNetworkConnection.ps1
+. $PSScriptRoot\..\Controllers\Audits\ControlNetworkCoverageTesting.ps1
 . $PSScriptRoot\..\Controllers\Audits\ControlCheckingRemoteSession.ps1
 
 function routeProcessorStressTesting{
@@ -21,8 +21,8 @@ function routeNetworkPerimeterTesting{
     controlNetworkPerimeterTesting
 }
 
-function routeCheckingNetworkConnection{
-    controlCheckingNetworkConnection
+function routeNetworkCoverageTesting{
+    controlNetworkCoverageTesting
 }
 
 $auditResults = [ordered]@{}

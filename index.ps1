@@ -4,7 +4,7 @@ param(
     [switch]$CheckingUpdateSystem,
     [switch]$StoragePerformanceTesting,
     [switch]$NetworkPerimeterTesting,
-    [switch]$CheckingNetworkConnection,
+    [switch]$NetworkCoverageTesting,
     [switch]$CheckingRemoteSession,
 
     [switch]$EndpointMetric,
@@ -59,8 +59,8 @@ if ($NetworkPerimeterTesting){
     routeNetworkPerimeterTesting
 }
 
-if ($CheckingNetworkConnection){
-    routeCheckingNetworkConnection
+if ($NetworkCoverageTesting){
+    routeNetworkCoverageTesting
 }
 
 if ($CheckingRemoteSession){
