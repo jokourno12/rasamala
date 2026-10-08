@@ -1,6 +1,6 @@
 . $PSScriptRoot\..\..\Config\Windows.ps1
 
-function controlCheckingNetworkConnection{
+function controlNetworkCoverageTesting{
     Write-Host "`n[*] Memulai Audit Network, Coverage & Sockets..." -ForegroundColor Cyan
 
     # Inisialisasi variabel penampung
@@ -11,53 +11,131 @@ function controlCheckingNetworkConnection{
     # ==========================================
     # [BARU] 0. NETWORK COVERAGE & LATENCY AUDIT
     # ==========================================
-    $coverageStatus = "N/A"
-    $connectionType = "Unknown"
-    $ssid = "N/A"
-    $signalPercent = 0
-    $rssiDbm = 0
-    $gatewayLatency = -1
+    $coverageStatus = "CRITICAL"
+    $interfaceType  = "Unknown"
+    $signalOrSpeed  = "Unknown"
+    $latencyStr     = "Timeout"
+    $coverageTier   = "BASIC"
+    $latencyAvg     = 999
 
     if ($IsWindows) {
         try {
             Write-Host "[+] Memeriksa Kualitas Sinyal & Coverage..." -ForegroundColor Green
-            # Cari adapter aktif
-            $activeAdapter = Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object Status -eq 'Up' | Select-Object -First 1
+            # Cari Default Gateway dan Adapter Jaringan aktif
+            $routes = Get-NetRoute -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue | Sort-Object RouteMetric
+            $route = $null
+            $adapter = $null
             
-            if ($activeAdapter) {
-                $isWifi = $activeAdapter.MediaType -match "802\.11|Wireless" -or $activeAdapter.InterfaceDescription -match "Wi-Fi|Wireless"
-                $connectionType = if ($isWifi) { "Wi-Fi" } else { "Ethernet" }
+            foreach ($r in $routes) {
+                $candAdapter = Get-NetAdapter -InterfaceIndex $r.ifIndex -ErrorAction SilentlyContinue
+                if ($candAdapter -and $candAdapter.MediaConnectionState -ne "Disconnected") {
+                    $route = $r
+                    $adapter = $candAdapter
+                    break
+                }
+            }
 
-                if ($isWifi) {
-                    $wlan = netsh wlan show interfaces
-                    $ssidMatch = $wlan | Select-String '^\s*SSID\s*:\s*(.*)$'
-                    $sigMatch  = $wlan | Select-String '^\s*Signal\s*:\s*(.*)$'
+            if (-not $route -and $routes) {
+                $route = $routes[0]
+                $adapter = Get-NetAdapter -InterfaceIndex $route.ifIndex -ErrorAction SilentlyContinue
+            }
+
+            if ($route) {
+                $gateway = $route.NextHop
+
+                # Tentukan jenis antarmuka
+                $interfaceType = "Ethernet"
+                $isWiFi = ($adapter.PhysicalMediaType -eq 802.11 -or $adapter.Name -match "Wi-Fi|Wireless")
+                if ($isWiFi) { $interfaceType = "Wi-Fi" }
+
+                # Ukur Sinyal (Wi-Fi) atau Kecepatan (Ethernet / VPN)
+                $rssi = -100
+                if ($isWiFi) {
+                    $netsh = netsh wlan show interfaces
                     
-                    if ($ssidMatch) { $ssid = $ssidMatch.Matches.Groups[1].Value.Trim() }
-                    if ($sigMatch) { 
-                        $signalPercent = [int]($sigMatch.Matches.Groups[1].Value.Trim() -replace '%','') 
-                        $rssiDbm = ($signalPercent / 2) - 100
-                        
-                        if ($signalPercent -ge 70) { $coverageStatus = "EXCELLENT" }
-                        elseif ($signalPercent -ge 50) { $coverageStatus = "FAIR" }
-                        else { $coverageStatus = "POOR" }
+                    # [PERBAIKAN]: Tangkap pesan penolakan akses dari Windows
+                    if ($netsh -match "error 5|requires elevation|location permission") {
+                        if ($adapter -and $adapter.Speed) {
+                            try {
+                                $speedMbps = [math]::Round([uint64]$adapter.Speed / 1000000)
+                                $signalOrSpeed = "$speedMbps Mbps (Need Admin)"
+                            } catch {
+                                $signalOrSpeed = "Need Admin"
+                            }
+                        } else {
+                            $signalOrSpeed = "Need Admin"
+                        }
+                    } else {
+                        $stateLine = $netsh | Select-String "State\s*:\s*(.*)"
+                        if ($stateLine -and $stateLine.Matches.Groups[1].Value.Trim() -match "disconnected") {
+                            $signalOrSpeed  = "Disconnected"
+                            $coverageStatus = "CRITICAL"
+                            $coverageTier   = "BASIC"
+                        } else {
+                            $sigLine = $netsh | Select-String "Signal|Sinyal" | Select-Object -First 1
+                            if ($sigLine -and $sigLine.Line -match "(\d+)%") {
+                                $sigPercent = [int]$matches[1]
+                                $rssi = [math]::Round(($sigPercent / 2) - 100)
+                                $sigLabel = if ($rssi -ge -60) { "Strong" } elseif ($rssi -ge -74) { "Moderate" } else { "Weak" }
+                                $signalOrSpeed = "$rssi dBm ($sigLabel)"
+                            } else {
+                                $signalOrSpeed = "No Signal"
+                            }
+                        }
                     }
                 } else {
-                    $signalPercent = 100
-                    $coverageStatus = "EXCELLENT (Cable)"
+                    # Logika Ethernet
+                    if ($adapter -and $adapter.Speed) {
+                        try {
+                            $speedMbps = [math]::Round([uint64]$adapter.Speed / 1000000)
+                            if ($speedMbps -ge 1000) {
+                                $signalOrSpeed = "$($speedMbps / 1000) Gbps Link"
+                            } else {
+                                $signalOrSpeed = "$speedMbps Mbps Link"
+                            }
+                        } catch {
+                            $signalOrSpeed = "Active Link"
+                        }
+                    } else {
+                        $signalOrSpeed = "Unknown Speed"
+                    }
                 }
 
-                # Cek Ping ke Default Gateway (Jika ada)
-                $gateway = Get-NetRoute -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty NextHop -First 1
-                if ($gateway) {
-                    $ping = Test-Connection -TargetName $gateway -Count 2 -ErrorAction SilentlyContinue
-                    if ($ping) {
-                        $gatewayLatency = [math]::Round(($ping | Measure-Object -Property Latency -Average).Average, 2)
+                # Pengujian Latensi Aktif (Ping Burst ke Gateway)
+                $ping = Test-Connection -TargetName $gateway -Count 3 -ErrorAction SilentlyContinue
+                if ($ping) {
+                    $validPings = $ping | Where-Object { $_.ResponseTime -ne $null -or $_.Latency -ne $null }
+                    if ($validPings) {
+                        if ($validPings[0].ResponseTime -ne $null) {
+                            $latencyAvg = ($validPings | Measure-Object -Property ResponseTime -Average).Average
+                        } else {
+                            $latencyAvg = ($validPings | Measure-Object -Property Latency -Average).Average
+                        }
+                        if ($latencyAvg -eq 0) { $latencyAvg = 0.5 }
+                        $latencyStr = "{0:N1} ms" -f $latencyAvg
                     }
+                }
+
+                # Evaluasi TIER berdasarkan performa aktif
+                if ($isWiFi -and $signalOrSpeed -eq "Disconnected") {
+                    $coverageTier   = "BASIC"
+                    $coverageStatus = "CRITICAL"
+                } elseif ($isWiFi -and $rssi -gt -100) {
+                    # Evaluasi Wi-Fi Presisi dengan Sinyal dBm (Jika Run as Admin)
+                    if ($rssi -ge -60 -and $latencyAvg -lt 15) { $coverageTier = "MISSION-CRITICAL"; $coverageStatus = "OK" }
+                    elseif ($rssi -ge -72 -and $latencyAvg -lt 30) { $coverageTier = "MULTIMEDIA"; $coverageStatus = "OK" }
+                    elseif ($rssi -ge -80 -and $latencyAvg -lt 80) { $coverageTier = "PRODUCTIVITY"; $coverageStatus = "WARNING" }
+                    else { $coverageTier = "BASIC"; $coverageStatus = "CRITICAL" }
+                } else {
+                    # Fallback untuk Ethernet atau Wi-Fi Non-Admin (Berbasis Latensi & Speed)
+                    if ($latencyAvg -lt 10) { $coverageTier = "MISSION-CRITICAL"; $coverageStatus = "OK" }
+                    elseif ($latencyAvg -lt 25) { $coverageTier = "MULTIMEDIA"; $coverageStatus = "OK" }
+                    elseif ($latencyAvg -lt 50) { $coverageTier = "PRODUCTIVITY"; $coverageStatus = "WARNING" }
+                    else { $coverageTier = "BASIC"; $coverageStatus = "CRITICAL" }
                 }
             }
         } catch {
-            Write-Warning "Gagal memeriksa Network Coverage."
+            Write-Warning "Gagal memeriksa Network Coverage: $($_.Exception.Message)"
         }
     }
 
@@ -196,33 +274,28 @@ function controlCheckingNetworkConnection{
     $networkAuditResult = [PSCustomObject]@{
         OSPlatform               = $osPlatform
         Status                   = $auditStatus
-        ConnectionType           = $connectionType
         CoverageStatus           = $coverageStatus
-        SSID                     = $ssid
-        SignalPercent            = $signalPercent
-        RSSI_dBm                 = $rssiDbm
-        GatewayLatency_ms        = $gatewayLatency
+        InterfaceType            = $interfaceType
+        SignalOrSpeed            = $signalOrSpeed
+        LatencyStr               = $latencyStr
+        CoverageTier             = $coverageTier
         ListeningPortsCount      = if ($inboundPorts) { $inboundPorts.Count } else { 0 }
         ListeningPorts           = $portList
         OutboundConnectionsCount = $outboundConns.Count
         OutboundDetails          = @($outboundConns)
     }
 
-    #$networkAuditResult | ConvertTo-Json -Depth 4
-
     Write-Host "`n==================================================" -ForegroundColor Cyan
     Write-Host " [ RINGKASAN STATUS & COVERAGE ]" -ForegroundColor Yellow
     Write-Host "==================================================" -ForegroundColor Cyan
     
-    # Menampilkan Tabel 1 dengan Header Singkat (Pilihan 1)
+    # Menampilkan Tabel 1: Murni Coverage (Tanpa Sockets)
     $networkAuditResult | Select-Object `
-        @{Name="STATUS"; Expression={$_.Status}},
-        @{Name="OS"; Expression={$_.OSPlatform}},
-        @{Name="TYPE"; Expression={$_.ConnectionType}},
-        @{Name="COVERAGE"; Expression={$_.CoverageStatus}},
-        @{Name="LATENCY"; Expression={"$($_.GatewayLatency_ms) ms"}},
-        @{Name="PORTS"; Expression={$_.ListeningPortsCount}},
-        @{Name="OUTBOUND"; Expression={$_.OutboundConnectionsCount}} | 
+        @{Name="STATUS"; Expression={$_.CoverageStatus}},
+        @{Name="INTERFACE"; Expression={$_.InterfaceType}},
+        @{Name="SIGNAL / SPEED"; Expression={$_.SignalOrSpeed}},
+        @{Name="LATENCY"; Expression={$_.LatencyStr}},
+        @{Name="COVERAGE TESTED"; Expression={$_.CoverageTier}} | 
         Format-Table -AutoSize | Out-String | Write-Host
 
     Write-Host "==================================================" -ForegroundColor Cyan
