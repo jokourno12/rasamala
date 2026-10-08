@@ -44,7 +44,7 @@ function controlCheckingRemoteSession{
         }
         
         # Cetak langsung ke layar
-        $auditResults['RemoteSession'] | ConvertTo-Json -Depth 4
+        #$auditResults['RemoteSession'] | ConvertTo-Json -Depth 4
     }
     
     # ==========================================
@@ -87,6 +87,46 @@ function controlCheckingRemoteSession{
         }
         
         # Cetak langsung ke layar
-        $auditResults['RemoteSession'] | ConvertTo-Json -Depth 4
+        #$auditResults['RemoteSession'] | ConvertTo-Json -Depth 4
+    }
+
+    if ($null -ne $auditResults['RemoteSession']) {
+        $data = $auditResults['RemoteSession']
+
+        Write-Host "`n==================================================" -ForegroundColor Cyan
+        Write-Host " [ RINGKASAN REMOTE SESSION ($($data.OSPlatform)) ]" -ForegroundColor Yellow
+        Write-Host "==================================================" -ForegroundColor Cyan
+
+        $statusColor = if ($data.Status -eq "PASS") { "Green" } else { "Red" }
+        Write-Host "STATUS AUDIT      : " -NoNewline
+        Write-Host "$($data.Status)" -ForegroundColor $statusColor
+        Write-Host "TOTAL SESI        : $($data.TotalSessions)"
+        Write-Host "SESI REMOTE (RDP) : $($data.RemoteSessionCount)`n"
+
+        Write-Host "==================================================" -ForegroundColor Cyan
+        Write-Host " [ DETAIL SESI AKTIF ]" -ForegroundColor Yellow
+        Write-Host "==================================================" -ForegroundColor Cyan
+
+        # Header Tabel Konsisten
+        Write-Host "USERNAME        SESSION TYPE     REMOTE HOST     IS REMOTE   STATE" -ForegroundColor Green
+        Write-Host "--------        ------------     -----------     ---------   -----" -ForegroundColor Green
+
+        if ($data.Details.Count -gt 0) {
+            foreach ($session in $data.Details) {
+                # Sorot warna Kuning jika terdeteksi Remote/RDP, selain itu Cyan
+                $rowColor = if ($session.IsRemote) { "Yellow" } else { "Cyan" }
+                
+                # [PERUBAHAN 4]: Spasi '-ForegroundColor $rowColor' sudah ditambahkan.
+                Write-Host ("{0,-15} {1,-16} {2,-15} {3,-11} {4}" -f `
+                    $session.Username, 
+                    $session.SessionType, 
+                    $session.RemoteHost, 
+                    $session.IsRemote, 
+                    $session.State)
+            }
+        } else {
+            Write-Host "Tidak ada sesi aktif yang terdeteksi." -ForegroundColor DarkGray
+        }
+        Write-Host ""
     }
 }
