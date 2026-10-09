@@ -16,6 +16,10 @@ function controlNetworkPerimeterTesting{
     $avgLatency = -1
     $packetLoss = 100
 
+    $egressTag = "N/A"
+    $dnsTag    = "N/A"
+    $mtuTag    = "N/A"
+
     # ==========================================
     # 1. KODE FIREWALL (WINDOWS)
     # ==========================================
@@ -60,13 +64,21 @@ function controlNetworkPerimeterTesting{
                 if ($netProfile) { $ssid = $netProfile.Name }
 
                 # Ekstrak BSSID dan Signal (%) dari netsh
-                $wlanLines = netsh wlan show interfaces 2>&1
-                foreach ($line in $wlanLines) {
-                    if ($line -match 'BSSID\s*:\s*([a-fA-F0-9:\-]{17})') { $bssid = $matches[1].Trim() }
-                    if ($line -match 'Signal\s*:\s*(\d+)%') { 
-                        $signalPercent = [int]$matches[1]
-                        # Konversi Signal % ke Estimasi RSSI (dBm) standar Windows
-                        $rssi = [math]::Round(($signalPercent / 2) - 100)
+                $wlanRaw = netsh wlan show interfaces 2>&1 | Out-String
+                
+                # Cek apakah terbentur proteksi Privasi Lokasi atau Hak Akses Admin
+                if ($wlanRaw -match "Location permission" -or $wlanRaw -match "error 5") {
+                    $bssid = "Requires Admin / Location Perm"
+                    $signalPercent = "N/A"
+                    $rssi = "N/A"
+                } else {
+                    $wlanLines =$wlanRaw -split "`r`n"
+                    foreach ($line in $wlanLines) {
+                        if ($line -match 'BSSID\s*:\s*([a-fA-F0-9:\-]{17})') { $bssid =$matches[1].Trim() }
+                        if ($line -match '(?:Signal|Sinyal)\s*:\s*(\d+)%') { 
+                            $signalPercent = [int]$matches[1]
+                            $rssi = [math]::Round(($signalPercent / 2) - 100)
+                        }
                     }
                 }
 
@@ -83,6 +95,43 @@ function controlNetworkPerimeterTesting{
                         $times = $pingResult | ForEach-Object { if ($null -ne $_.ResponseTime) { $_.ResponseTime } elseif ($null -ne $_.Latency) { $_.Latency } }
                         if ($times) { $avgLatency = [math]::Round(($times | Measure-Object -Average).Average) }
                     }
+
+                    try {
+                        $tcpClient = New-Object System.Net.Sockets.TcpClient
+                        $asyncResult = $tcpClient.BeginConnect("1.1.1.1", 445, $null, $null)
+                        $wait = $asyncResult.AsyncWaitHandle.WaitOne(1000,$false) # Timeout 1 detik
+                        if ($tcpClient.Connected) {$egressTag = "PERMISSIVE (High-Risk Ports Open)"
+                            $tcpClient.Close()
+                        } else {
+                            $egressTag = "RESTRICTED (Port 445/SMB Blocked)"
+                        }
+                    } catch {
+                        $egressTag = "RESTRICTED (Port 445/SMB Blocked)"
+                    }
+
+                    try {
+                        # Resolve one.one.one.one lewat TCP ke 1.1.1.1
+                        $dnsTest = Resolve-DnsName -Name "one.one.one.one" -Server "1.1.1.1" -TcpOnly -ErrorAction SilentlyContinue
+                        if ($dnsTest) {$dnsTag = "CLEAN (Public Resolver Valid)"
+                        } else {
+                            $dnsTag = "SUSPICIOUS (DNS Intercepted)"
+                        }
+                    } catch {
+                        $dnsTag = "SUSPICIOUS (DNS Intercepted)"
+                    }
+
+                    $ping1500 = ping.exe -f -n 1 -w 1000 -l 1472$gwIP 2>&1 | Out-String # 1472 payload + 28 header = 1500
+                    if ($ping1500 -match "Reply from|Balasan dari") {
+                        $mtuTag = "1500 Bytes"
+                    } else {
+                        $ping1420 = ping.exe -f -n 1 -w 1000 -l 1392$gwIP 2>&1 | Out-String # 1392 payload + 28 = 1420
+                        if ($ping1420 -match "Reply from|Balasan dari") {
+                            $mtuTag = "1420 Bytes (MTU Bottleneck)"
+                        } else {
+                            $mtuTag = "< 1420 Bytes (Fragmented)"
+                        }
+                    }
+
                 }
 
                 # Susun Pesan Roaming
@@ -146,6 +195,15 @@ function controlNetworkPerimeterTesting{
             $finalStatus = "WARNING"
             $statusReason += "Packet Loss ($packetLoss%)"
         }
+
+        if ($egressTag -match "PERMISSIVE") {
+            $finalStatus = "WARNING"
+            $statusReason += "Egress Port Terbuka"
+        }
+        if ($dnsTag -match "SUSPICIOUS") {
+            $finalStatus = "WARNING"
+            $statusReason += "DNS Intercepted"
+        }
     }
 
     if ($statusReason.Count -gt 0) {
@@ -164,6 +222,9 @@ function controlNetworkPerimeterTesting{
         RSSI_dBm          = $rssi
         GatewayLatency_ms = $avgLatency
         PacketLossPercent = $packetLoss
-        Message           = "$fwMessage | $roamingMessage"
+        Egress_Filtering  = $egressTag
+        DNS_Tampering     = $dnsTag
+        Path_MTU          = $mtuTag
+        Perimeter_Tested  = "$fwMessage | $roamingMessage"
     }
 }
