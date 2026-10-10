@@ -1,9 +1,14 @@
+. $PSScriptRoot\..\Controllers\Audits\ControlAuditEndpoint.ps1
 . $PSScriptRoot\..\Controllers\Audits\ControlProcessorStressTesting.ps1
 . $PSScriptRoot\..\Controllers\Audits\ControlCheckingUpdateSystem.ps1
 . $PSScriptRoot\..\Controllers\Audits\ControlStoragePerformanceTesting.ps1
 . $PSScriptRoot\..\Controllers\Audits\ControlNetworkPerimeterTesting.ps1
 . $PSScriptRoot\..\Controllers\Audits\ControlNetworkCoverageTesting.ps1
 . $PSScriptRoot\..\Controllers\Audits\ControlCheckingRemoteSession.ps1
+
+function routeAuditEndpoint{
+    controlAuditEndpoint
+}
 
 function routeProcessorStressTesting{
     controlProcessorStressTesting

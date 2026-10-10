@@ -1,11 +1,12 @@
 [CmdletBinding()]
 param(
-    [switch]$ProcessorStressTesting,
-    [switch]$CheckingUpdateSystem,
-    [switch]$StoragePerformanceTesting,
-    [switch]$NetworkPerimeterTesting,
-    [switch]$NetworkCoverageTesting,
-    [switch]$CheckingRemoteSession,
+    [switch]$AuditEndpoint,
+        [switch]$ProcessorStressTesting,
+        [switch]$CheckingUpdateSystem,
+        [switch]$StoragePerformanceTesting,
+        [switch]$NetworkPerimeterTesting,
+        [switch]$NetworkCoverageTesting,
+        [switch]$CheckingRemoteSession,
 
     [switch]$EndpointMetric,
     [switch]$AqlMonitoring,
@@ -43,6 +44,10 @@ function showBanner {
 
 showBanner
 # Audit
+if ($AuditEndpoint){
+    routeAuditEndpoint
+}
+
 if ($ProcessorStressTesting){
     routeProcessorStressTesting
 }
