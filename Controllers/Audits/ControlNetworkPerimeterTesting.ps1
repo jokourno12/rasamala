@@ -8,11 +8,11 @@ function controlNetworkPerimeterTesting{
     
     # Variabel Default Modul Roaming
     $roamingActive = $false
-    $roamingMessage = "Roaming Check: Tidak didukung pada koneksi Non-Wi-Fi / OS ini."
-    $bssid = ""
-    $ssid = ""
-    $signalPercent = 0
-    $rssi = 0
+    $roamingMessage = "Tidak ada koneksi jaringan aktif."
+    $bssid = "N/A"
+    $ssid = "N/A (Ethernet Connection)"
+    $signalPercent = "N/A"
+    $rssi = "N/A"
     $avgLatency = -1
     $packetLoss = 100
 
@@ -121,15 +121,15 @@ function controlNetworkPerimeterTesting{
                         $dnsTag = "SUSPICIOUS (DNS Intercepted)"
                     }
 
-                    $ping1500 = ping.exe -f -n 1 -w 1000 -l 1472$gwIP 2>&1 | Out-String # 1472 payload + 28 header = 1500
+                    $ping1500 = ping.exe -f -n 1 -w 1000 -l 1472 $gwIP 2>&1 | Out-String
                     if ($ping1500 -match "Reply from|Balasan dari") {
                         $mtuTag = "1500 Bytes"
                     } else {
-                        $ping1420 = ping.exe -f -n 1 -w 1000 -l 1392$gwIP 2>&1 | Out-String # 1392 payload + 28 = 1420
+                        $ping1420 = ping.exe -f -n 1 -w 1000 -l 1392 $gwIP 2>&1 | Out-String
                         if ($ping1420 -match "Reply from|Balasan dari") {
                             $mtuTag = "1420 Bytes (MTU Bottleneck)"
                         } else {
-                            $mtuTag = "< 1420 Bytes (Fragmented)"
+                            $mtuTag = "< 1420 Bytes (Fragmented / ICMP Blocked)"
                         }
                     }
 
@@ -152,7 +152,13 @@ function controlNetworkPerimeterTesting{
             $roamingMessage = "Gagal membaca metrik Roaming/Wi-Fi: $($_.Exception.Message)"
         }
         $gateway = Get-NetIPConfiguration -ErrorAction SilentlyContinue | Where-Object {$_.IPv4DefaultGateway } | Select-Object -First 1
-        if ($gateway) { $gwIP =$gateway.IPv4DefaultGateway.NextHop }
+        if ($gateway) { 
+            $gwIP = $gateway.IPv4DefaultGateway.NextHop
+            if (-not $roamingActive) {$roamingMessage = "Koneksi LAN Aktif ($gwIP)"
+            } else {
+                $roamingMessage = "Wi-Fi Aktif | SSID: $ssid | BSSID: $bssid | Sinyal: $signalPercent\% ($rssi dBm)"
+            }
+        }
     }
 
     # ==========================================
@@ -161,12 +167,18 @@ function controlNetworkPerimeterTesting{
     elseif ($IsLinux) {
         $osName = "Linux"
         Write-Host "[Linux] Memeriksa status UFW/Firewalld..." @Net
-        $fwStatus = $false; $fwMessage = "Layanan Firewall tidak terdeteksi."
-        # ... (Logika Linux tetap sama seperti sebelumnya, dipersingkat di contoh ini agar fokus ke Windows) ...
+        $fwStatus = $false 
+        $fwMessage = "Layanan Firewall tidak terdeteksi."
+
         if (Get-Command ufw -ErrorAction SilentlyContinue) { $fwStatus = $true; $fwType = "UFW"; $fwMessage = "UFW Aktif." }
 
         $defaultRoute = ip -4 route show default 2>/dev/null | Select-Object -First 1
-        if ($defaultRoute -match 'default via (\S+)') { $gwIP =$matches[1] }
+        if ($defaultRoute -match 'default via (\S+)') { 
+            $gwIP = $matches[1]
+            if (-not $roamingActive) {
+                $roamingMessage = "Koneksi LAN Aktif ($gwIP)"
+            }
+        }
     }
 
     # ==========================================
@@ -183,7 +195,7 @@ function controlNetworkPerimeterTesting{
         # [A] Ping & Packet Loss
         $pingResult = Test-Connection -ComputerName $gwIP -Count 3 -ErrorAction SilentlyContinue
         if ($pingResult) {
-            $packetLoss = [math]::Round(((3 -$pingResult.Count) / 3) * 100)
+            $packetLoss = [math]::Round(((3 - $pingResult.Count) / 3) * 100)
             $times =$pingResult | ForEach-Object { if ($null -ne$_.ResponseTime) { $_.ResponseTime } elseif ($null -ne $_.Latency) {$_.Latency } }
             if ($times) { $avgLatency = [math]::Round(($times | Measure-Object -Average).Average) }
         }
@@ -205,7 +217,7 @@ function controlNetworkPerimeterTesting{
         # [C] DNS Tampering (Resolusi one.one.one.one)
         try {
             if ($IsWindows) {$dnsTest = Resolve-DnsName -Name "one.one.one.one" -Server "1.1.1.1" -TcpOnly -ErrorAction SilentlyContinue
-                if ($dnsTest) { $dnsTag = "CLEAN (Public Resolver Valid)" } else { $dnsTag = "SUSPICIOUS (DNS Intercepted)" }
+                if ($dnsTest) { $dnsTag = "CLEAN (Public Resolver Valid)" } else { $dnsTag = "SUSPICIOUS (Possible Corporate DNS Intercepted)" }
             } elseif ($IsLinux -or $IsMacOS) {$dnsTest = dig '@1.1.1.1' one.one.one.one +tcp +short 2>/dev/null
                 if ($dnsTest -match "\d+\.\d+\.\d+\.\d+") { $dnsTag = "CLEAN (Public Resolver Valid)" } else { $dnsTag = "SUSPICIOUS (DNS Intercepted)" }
             }
@@ -216,20 +228,20 @@ function controlNetworkPerimeterTesting{
         # [D] Path MTU Discovery
         try {
             if ($IsWindows) {
-                $ping1500 = ping.exe -f -n 1 -w 1000 -l 1472$gwIP 2>&1 | Out-String
+                $ping1500 = ping.exe -f -n 1 -w 1000 -l 1472 $gwIP 2>&1 | Out-String
                 if ($ping1500 -match "Reply from|Balasan dari") { $mtuTag = "1500 Bytes" }
                 else {
-                    $ping1420 = ping.exe -f -n 1 -w 1000 -l 1392$gwIP 2>&1 | Out-String
+                    $ping1420 = ping.exe -f -n 1 -w 1000 -l 1392 $gwIP 2>&1 | Out-String
                     if ($ping1420 -match "Reply from|Balasan dari") { $mtuTag = "1420 Bytes (MTU Bottleneck)" }
-                    else { $mtuTag = "< 1420 Bytes (Fragmented)" }
+                    else { $mtuTag = "< 1420 Bytes (Fragmented / ICMP Blocked)" }
                 }
-            } elseif ($IsLinux -or$IsMacOS) {
+            } elseif ($IsLinux -or $IsMacOS) {
                 $ping1500 = ping -c 1 -M do -s 1472 -W 1$gwIP 2>&1 | Out-String
                 if ($ping1500 -match "bytes from") { $mtuTag = "1500 Bytes" }
                 else {
-                    $ping1420 = ping -c 1 -M do -s 1392 -W 1$gwIP 2>&1 | Out-String
+                    $ping1420 = ping -c 1 -M do -s 1392 -W 1 $gwIP 2>&1 | Out-String
                     if ($ping1420 -match "bytes from") { $mtuTag = "1420 Bytes (MTU Bottleneck)" }
-                    else { $mtuTag = "< 1420 Bytes (Fragmented)" }
+                    else { $mtuTag = "< 1420 Bytes (Fragmented / ICMP Blocked)" }
                 }
             }
         } catch {
@@ -251,7 +263,7 @@ function controlNetworkPerimeterTesting{
         $statusReason += "Firewall OFF"
     }
 
-    if ($roamingActive -and $rssi -lt -75 -and $rssi -ne 0) { 
+    if ($roamingActive -and $rssi -ne "N/A" -and $rssi -lt -75 -and $rssi -ne 0) { 
         $finalStatus = "WARNING"
         $statusReason += "Sinyal Sangat Lemah ($rssi dBm)"
     }
