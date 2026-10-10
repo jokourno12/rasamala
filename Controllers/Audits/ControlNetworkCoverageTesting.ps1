@@ -139,6 +139,73 @@ function controlNetworkCoverageTesting{
         }
     }
 
+    elseif ($IsLinux) {
+        Write-Host "[+] Memeriksa Kualitas Sinyal & Coverage (Linux)..." -ForegroundColor Green
+        try {
+            # Ambil Default Gateway dari tabel routing kernel Linux
+            $defaultRoute = ip -4 route show default 2>/dev/null | Select-Object -First 1
+            if ($defaultRoute -match 'default via (\S+) dev (\S+)') {
+                $gateway =$matches[1]
+                $iface =$matches[2]
+                
+                # Interface Wi-Fi di Linux biasanya berawalan 'wl' (wlan0, wlp2s0)
+                $isWiFi = ($iface -match '^wl')
+                $interfaceType = if ($isWiFi) { "Wi-Fi" } else { "Ethernet" }
+                
+                # Baca Sinyal/Kecepatan
+                if ($isWiFi) {
+                    $iwOutput = iwconfig$iface 2>/dev/null | Select-String "Signal level=(-\d+)\s+dBm"
+                    if ($iwOutput -and $iwOutput.Matches.Groups[1].Value) {
+                        $rssi = [int]$iwOutput.Matches.Groups[1].Value 
+                        $sigLabel = if ($rssi -ge -60) { "Strong" } elseif ($rssi -ge -74) { "Moderate" } else { "Weak" }
+                        $signalOrSpeed = "$rssi dBm ($sigLabel)"
+                    } else {
+                        $signalOrSpeed = "Active Wi-Fi Link"
+                    }
+                } else {
+                    $speedFile = "/sys/class/net/$iface/speed"
+                    if (Test-Path $speedFile) {
+                        $speed = Get-Content$speedFile -ErrorAction SilentlyContinue
+                        if ($speed -and$speed -ne "-1") {
+                            $signalOrSpeed = "$speed Mbps Link"
+                        } else {
+                            $signalOrSpeed = "Active Link"
+                        }
+                    } else {
+                        $signalOrSpeed = "Active Link"
+                    }
+                }
+
+                # Pengujian Latensi Aktif (Ping ke Gateway)
+                $ping = Test-Connection -TargetName$gateway -Count 3 -ErrorAction SilentlyContinue
+                if ($ping) {
+                    $validPings =$ping | Where-Object { $_.ResponseTime -ne$null -or $_.Latency -ne$null }
+                    if ($validPings) {
+                        if ($validPings[0].ResponseTime -ne$null) {
+                            $latencyAvg = ($validPings | Measure-Object -Property ResponseTime -Average).Average
+                        } else {
+                            $latencyAvg = ($validPings | Measure-Object -Property Latency -Average).Average
+                        }
+                        if ($latencyAvg -eq 0) {$latencyAvg = 0.5 }
+                        $latencyStr = "{0:N1} ms" -f $latencyAvg
+                    }
+                }
+
+                # Evaluasi TIER
+                if ($latencyAvg -lt 15) { $coverageTier = "MISSION-CRITICAL"; $coverageStatus = "OK" }
+                elseif ($latencyAvg -lt 30) { $coverageTier = "MULTIMEDIA"; $coverageStatus = "OK" }
+                elseif ($latencyAvg -lt 80) { $coverageTier = "PRODUCTIVITY"; $coverageStatus = "WARNING" }
+                else { $coverageTier = "BASIC"; $coverageStatus = "CRITICAL" }
+
+            } else {
+                $coverageStatus = "CRITICAL"
+                $signalOrSpeed  = "Disconnected / No Route"
+            }
+        } catch {
+            Write-Warning "Gagal membaca Network Coverage Linux: $($_.Exception.Message)"
+        }
+    }
+
     # ==========================================
     # 1. WINDOWS: Menggunakan Get-NetTCPConnection
     # ==========================================
@@ -316,19 +383,30 @@ $aggregatedResults = foreach ($group in $networkAuditResult.OutboundDetails | Gr
     $proc = Get-Process -Id $pidNum -ErrorAction SilentlyContinue
     
     if ($proc -and $proc.Path) {
-        # Jika PowerShell punya hak akses untuk membaca file
-        $sig = Get-AuthenticodeSignature -FilePath $proc.Path -ErrorAction SilentlyContinue
-        if ($sig -and $sig.Status -eq 'Valid') {
-            $statusTag = "[VALID]"
-        } else {
-            $statusTag = "[UNSIGNED]"
-            $riskLevel = "HIGH"
-        }
-        
-        # Ekstrak nama perusahaan / publisher dari file
-        $company = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($proc.Path).CompanyName
-        if (-not [string]::IsNullOrWhiteSpace($company)) {
-            $publisher = $company.Trim()
+        if ($IsWindows) {
+            # Jika PowerShell punya hak akses untuk membaca file EXE/DLL
+            $sig = Get-AuthenticodeSignature -FilePath $proc.Path -ErrorAction SilentlyContinue
+            if ($sig -and $sig.Status -eq 'Valid') {$statusTag = "[VALID]"
+            } else {
+                $statusTag = "[UNSIGNED]"
+                $riskLevel = "HIGH"
+            }
+                
+            # Ekstrak nama perusahaan / publisher dari file
+            $company = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($proc.Path).CompanyName
+            if (-not [string]::IsNullOrWhiteSpace($company)) {
+                $publisher =$company.Trim()
+            }
+        } 
+        elseif ($IsLinux -or$IsMacOS) {
+            # Linux/macOS tidak menggunakan Authenticode. 
+            # Gunakan validasi path hirarki sistem sebagai gantinya.
+            if ($proc.Path -match '^/(usr/)?(s)?bin/' -or $proc.Path -match '^/lib') {$statusTag = "[VALID]"
+                $publisher = "System / OS Core Binary"
+            } else {
+                $statusTag = "[UNVERIFIED]"
+                $publisher = "User / Third-Party Binary"
+            }
         }
         
         # Heuristik lokasi mencurigakan

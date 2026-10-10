@@ -19,6 +19,7 @@ function controlNetworkPerimeterTesting{
     $egressTag = "N/A"
     $dnsTag    = "N/A"
     $mtuTag    = "N/A"
+    $gwIP      = $null
 
     # ==========================================
     # 1. KODE FIREWALL (WINDOWS)
@@ -150,6 +151,8 @@ function controlNetworkPerimeterTesting{
         } catch {
             $roamingMessage = "Gagal membaca metrik Roaming/Wi-Fi: $($_.Exception.Message)"
         }
+        $gateway = Get-NetIPConfiguration -ErrorAction SilentlyContinue | Where-Object {$_.IPv4DefaultGateway } | Select-Object -First 1
+        if ($gateway) { $gwIP =$gateway.IPv4DefaultGateway.NextHop }
     }
 
     # ==========================================
@@ -161,6 +164,9 @@ function controlNetworkPerimeterTesting{
         $fwStatus = $false; $fwMessage = "Layanan Firewall tidak terdeteksi."
         # ... (Logika Linux tetap sama seperti sebelumnya, dipersingkat di contoh ini agar fokus ke Windows) ...
         if (Get-Command ufw -ErrorAction SilentlyContinue) { $fwStatus = $true; $fwType = "UFW"; $fwMessage = "UFW Aktif." }
+
+        $defaultRoute = ip -4 route show default 2>/dev/null | Select-Object -First 1
+        if ($defaultRoute -match 'default via (\S+)') { $gwIP =$matches[1] }
     }
 
     # ==========================================
@@ -171,6 +177,66 @@ function controlNetworkPerimeterTesting{
         Write-Host "[macOS] Memeriksa Application Layer Firewall..." @Net
         $fwStatus = $false; $fwMessage = "ALF tidak terdeteksi."
         # ... (Logika macOS tetap sama seperti sebelumnya) ...
+    }
+
+    if ($gwIP) {
+        # [A] Ping & Packet Loss
+        $pingResult = Test-Connection -ComputerName $gwIP -Count 3 -ErrorAction SilentlyContinue
+        if ($pingResult) {
+            $packetLoss = [math]::Round(((3 -$pingResult.Count) / 3) * 100)
+            $times =$pingResult | ForEach-Object { if ($null -ne$_.ResponseTime) { $_.ResponseTime } elseif ($null -ne $_.Latency) {$_.Latency } }
+            if ($times) { $avgLatency = [math]::Round(($times | Measure-Object -Average).Average) }
+        }
+
+        # [B] Egress Filtering (Port 445 SMB)
+        try {
+            $tcpClient = New-Object System.Net.Sockets.TcpClient
+            $asyncResult = $tcpClient.BeginConnect("1.1.1.1", 445, $null, $null)
+            $wait = $asyncResult.AsyncWaitHandle.WaitOne(1000,$false)
+            if ($tcpClient.Connected) {$egressTag = "PERMISSIVE (High-Risk Ports Open)"
+                $tcpClient.Close()
+            } else {
+                $egressTag = "RESTRICTED (Port 445/SMB Blocked)"
+            }
+        } catch {
+            $egressTag = "RESTRICTED (Port 445/SMB Blocked)"
+        }
+
+        # [C] DNS Tampering (Resolusi one.one.one.one)
+        try {
+            if ($IsWindows) {$dnsTest = Resolve-DnsName -Name "one.one.one.one" -Server "1.1.1.1" -TcpOnly -ErrorAction SilentlyContinue
+                if ($dnsTest) { $dnsTag = "CLEAN (Public Resolver Valid)" } else { $dnsTag = "SUSPICIOUS (DNS Intercepted)" }
+            } elseif ($IsLinux -or $IsMacOS) {$dnsTest = dig '@1.1.1.1' one.one.one.one +tcp +short 2>/dev/null
+                if ($dnsTest -match "\d+\.\d+\.\d+\.\d+") { $dnsTag = "CLEAN (Public Resolver Valid)" } else { $dnsTag = "SUSPICIOUS (DNS Intercepted)" }
+            }
+        } catch {
+            $dnsTag = "SUSPICIOUS (DNS Intercepted)"
+        }
+
+        # [D] Path MTU Discovery
+        try {
+            if ($IsWindows) {
+                $ping1500 = ping.exe -f -n 1 -w 1000 -l 1472$gwIP 2>&1 | Out-String
+                if ($ping1500 -match "Reply from|Balasan dari") { $mtuTag = "1500 Bytes" }
+                else {
+                    $ping1420 = ping.exe -f -n 1 -w 1000 -l 1392$gwIP 2>&1 | Out-String
+                    if ($ping1420 -match "Reply from|Balasan dari") { $mtuTag = "1420 Bytes (MTU Bottleneck)" }
+                    else { $mtuTag = "< 1420 Bytes (Fragmented)" }
+                }
+            } elseif ($IsLinux -or$IsMacOS) {
+                $ping1500 = ping -c 1 -M do -s 1472 -W 1$gwIP 2>&1 | Out-String
+                if ($ping1500 -match "bytes from") { $mtuTag = "1500 Bytes" }
+                else {
+                    $ping1420 = ping -c 1 -M do -s 1392 -W 1$gwIP 2>&1 | Out-String
+                    if ($ping1420 -match "bytes from") { $mtuTag = "1420 Bytes (MTU Bottleneck)" }
+                    else { $mtuTag = "< 1420 Bytes (Fragmented)" }
+                }
+            }
+        } catch {
+            $mtuTag = "Unknown"
+        }
+    } else {
+        $roamingMessage += " [Offline / Gateway Not Found]"
     }
 
     # ==========================================
@@ -185,25 +251,26 @@ function controlNetworkPerimeterTesting{
         $statusReason += "Firewall OFF"
     }
 
-    # Evaluasi Kualitas Roaming (Jika Wi-Fi Aktif)
-    if ($roamingActive) {
-        if ($rssi -lt -75 -and $rssi -ne 0) { 
-            $finalStatus = "WARNING"
-            $statusReason += "Sinyal Sangat Lemah ($rssi dBm)"
-        }
-        if ($packetLoss -gt 0) {
-            $finalStatus = "WARNING"
-            $statusReason += "Packet Loss ($packetLoss%)"
-        }
+    if ($roamingActive -and $rssi -lt -75 -and $rssi -ne 0) { 
+        $finalStatus = "WARNING"
+        $statusReason += "Sinyal Sangat Lemah ($rssi dBm)"
+    }
 
-        if ($egressTag -match "PERMISSIVE") {
-            $finalStatus = "WARNING"
-            $statusReason += "Egress Port Terbuka"
-        }
-        if ($dnsTag -match "SUSPICIOUS") {
-            $finalStatus = "WARNING"
-            $statusReason += "DNS Intercepted"
-        }
+    if ($packetLoss -gt 0 -and $packetLoss -lt 100) {
+        $finalStatus = "WARNING"
+        $statusReason += "Packet Loss ($packetLoss%)"
+    } elseif ($packetLoss -eq 100) {
+        $finalStatus = "CRITICAL"
+        $statusReason += "Offline / No Route"
+    }
+
+    if ($egressTag -match "PERMISSIVE") {
+        $finalStatus = "WARNING"
+        $statusReason += "Egress Port Terbuka"
+    }
+    if ($dnsTag -match "SUSPICIOUS") {
+        $finalStatus = "WARNING"
+        $statusReason += "DNS Intercepted"
     }
 
     if ($statusReason.Count -gt 0) {
