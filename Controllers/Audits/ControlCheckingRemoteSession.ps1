@@ -63,12 +63,22 @@ function controlCheckingRemoteSession{
                     $tty        = $matches[2]
                     $remoteHost = $matches[4]
                     
-                    $isRemote = -not [string]::IsNullOrWhiteSpace($remoteHost)
+                    if ($null -ne $remoteHost) {
+                        $remoteHost = $remoteHost.Trim()
+                    }
+
+                    if ([string]::IsNullOrWhiteSpace($remoteHost) -or $remoteHost -match "^:\d" -or $remoteHost -match "wayland|tty") {
+                        $isRemote = $false
+                        $finalRemoteHost = "localhost"
+                    } else {
+                        $isRemote = $true
+                        $finalRemoteHost = $remoteHost
+                    }
                     
                     $sessions += [PSCustomObject]@{
                         Username    = $username
                         SessionType = if ($isRemote) { "Remote ($tty)" } else { "Local ($tty)" }
-                        RemoteHost  = if ($isRemote) { $remoteHost } else { "localhost" }
+                        RemoteHost  = $finalRemoteHost
                         IsRemote    = $isRemote
                         State       = "Active"
                     }
