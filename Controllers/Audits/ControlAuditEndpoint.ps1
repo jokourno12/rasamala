@@ -8,5 +8,8 @@ function controlAuditEndpoint{
         routeCheckingRemoteSession
     } *>&1
     
-    $HasilAudit
+    $cleanData = $Global:HasilAudit | Where-Object { $_ -is [PSCustomObject] }
+
+    $jsonResult = $cleanData | ConvertTo-Json -Depth 4
+    return $jsonResult
 }
