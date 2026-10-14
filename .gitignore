@@ -1,2 +1,4 @@
 
 IsolatedSessions/
+*.xlsx
+*.db
