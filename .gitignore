@@ -2,3 +2,6 @@
 IsolatedSessions/
 *.xlsx
 *.db
+
+
+!.gitkeep
