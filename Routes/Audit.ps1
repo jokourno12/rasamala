@@ -5,6 +5,7 @@
 . $PSScriptRoot\..\Controllers\Audits\ControlNetworkPerimeterTesting.ps1
 . $PSScriptRoot\..\Controllers\Audits\ControlNetworkCoverageTesting.ps1
 . $PSScriptRoot\..\Controllers\Audits\ControlCheckingRemoteSession.ps1
+. $PSScriptRoot\..\Helpers\HelperDataEpeat.ps1
 
 function routeAuditEndpoint{
     controlAuditEndpoint
@@ -33,5 +34,6 @@ function routeNetworkCoverageTesting{
 $auditResults = [ordered]@{}
 
 function routeCheckingRemoteSession{
+    helperDataEpeat
     controlCheckingRemoteSession
 }

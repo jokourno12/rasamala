@@ -1,7 +1,14 @@
 . $PSScriptRoot\..\..\Config\Windows.ps1
 
 function controlCheckingRemoteSession{
-    Write-Host "`n[*] Memulai Audit Remote Session..." @Cha
+    Write-Host "`n[*] Memulai Audit Remote Session & Sustainability..." @Cha
+    
+    # [TAMBAHAN: Mendefinisikan path untuk LiteDB dan database sustainability.db]
+    $databasePath = "$PSScriptRoot\..\..\Database"
+    $libPath = "$PSScriptRoot\..\..\Helpers\Lib"
+    $dbFile = "$databasePath\sustainability.db"
+    $liteDbDll = "$libPath\LiteDB.dll"
+
     $sessions = @()
 
     # ==========================================
@@ -33,18 +40,54 @@ function controlCheckingRemoteSession{
             }
         }
 
+        # Dapatkan Model Hardware Windows
+        $hwInfo = Get-CimInstance Win32_ComputerSystem
+        #$hwInfo = [PSCustomObject]@{ Manufacturer = "Dell Inc."; Model = "OptiPlex 3000" }
+        $hardwareModel = "$($hwInfo.Manufacturer) $($hwInfo.Model)"
+        
+        # [TAMBAHAN: Logika pengecekan EPEAT Status dari LiteDB]
+        $epeatStatus = "Unregistered" # Default status jika tidak ditemukan
+        
+        if (Test-Path $dbFile) {
+            if (Test-Path $liteDbDll) {
+                Add-Type -Path $liteDbDll
+                $db = New-Object LiteDB.LiteDatabase("Filename=$dbFile;Connection=shared")
+                $collection = $db.GetCollection("epeat_products")
+                
+                # Membersihkan nama manufacturer (Misal: "Dell Inc." menjadi "Dell") agar mudah dicocokkan dengan "DELL" di DB
+                $cleanManufacturer = $hwInfo.Manufacturer -replace '(?i)\s*Inc\.?|\s*Corp\.?|\s*Ltd\.?', ''
+                
+                # Mencari produk di LiteDB menggunakan manipulasi PowerShell (case-insensitive)
+                $matchedProduct = $collection.FindAll() | Where-Object {
+                    $_["manufacturer"].AsString -match $cleanManufacturer -and
+                    $_["product_name"].AsString -match [regex]::Escape($hwInfo.Model)
+                } | Select-Object -First 1
+
+                if ($matchedProduct) {
+                    $epeatStatus = $matchedProduct["tier"].AsString
+                }
+                
+                $db.Dispose()
+            } else {
+                Write-Host "[-] LiteDB.dll tidak ditemukan. Lewati pengecekan EPEAT." -ForegroundColor Yellow
+            }
+        } else {
+            Write-Host "[-] sustainability.db tidak ditemukan. Lewati pengecekan EPEAT." -ForegroundColor Yellow
+        }
+        
         # KONSOLIDASI & TAMPILKAN HASIL KHUSUS WINDOWS
         $activeRemoteSessions = @($sessions | Where-Object { $_.IsRemote -eq $true })
         $auditResults['RemoteSession'] = [PSCustomObject]@{
             OSPlatform         = "Windows"
+            HardwareModel      = $hardwareModel
+            # [PERUBAHAN: Memasukkan variabel $epeatStatus hasil query database, bukan string hardcode]
+            EpeatStatus        = $epeatStatus 
             Status             = if ($activeRemoteSessions.Count -gt 0) { "FAIL" } else { "PASS" }
             TotalSessions      = $sessions.Count
             RemoteSessionCount = $activeRemoteSessions.Count
             Details            = $sessions
         }
         
-        # Cetak langsung ke layar
-        #$auditResults['RemoteSession'] | ConvertTo-Json -Depth 4
     }
     
     # ==========================================
@@ -86,30 +129,44 @@ function controlCheckingRemoteSession{
             }
         }
 
+        # Dapatkan Model Hardware Linux/MacOS dasar (Placeholder, jika ingin diperluas)
+        $hardwareModel = "N/A (Cek DMI/dmidecode)"
+        
         # KONSOLIDASI & TAMPILKAN HASIL KHUSUS LINUX/MACOS
         $activeRemoteSessions = @($sessions | Where-Object { $_.IsRemote -eq $true })
         $auditResults['RemoteSession'] = [PSCustomObject]@{
             OSPlatform         = $osName
+            HardwareModel      = $hardwareModel
+            # Pada Linux belum kita pasang pencarian ke DB
+            EpeatStatus        = "Unregistered" 
             Status             = if ($activeRemoteSessions.Count -gt 0) { "FAIL" } else { "PASS" }
             TotalSessions      = $sessions.Count
             RemoteSessionCount = $activeRemoteSessions.Count
             Details            = $sessions
         }
-        
-        # Cetak langsung ke layar
-        #$auditResults['RemoteSession'] | ConvertTo-Json -Depth 4
     }
 
+    # ==========================================
+    # 3. CETAK KE LAYAR (UI REPORTING)
+    # ==========================================
     if ($null -ne $auditResults['RemoteSession']) {
         $data = $auditResults['RemoteSession']
 
         Write-Host "`n==================================================" -ForegroundColor Cyan
-        Write-Host " [ RINGKASAN REMOTE SESSION ($($data.OSPlatform)) ]" -ForegroundColor Yellow
+        # [PERUBAHAN: Menyesuaikan judul ringkasan]
+        Write-Host " [ REMOTE SESSION & SUSTAINABILITY ($($data.OSPlatform)) ]" -ForegroundColor Yellow
         Write-Host "==================================================" -ForegroundColor Cyan
 
+        # [TAMBAHAN: Menampilkan informasi Hardware dan EPEAT dari data.HardwareModel dan data.EpeatStatus]
+        $epeatColor = if ($data.EpeatStatus -eq "Unregistered") { "Red" } else { "Green" }
+        Write-Host "HARDWARE MODEL    : $($data.HardwareModel)"
+        Write-Host "EPEAT 1.0         : " -NoNewline
+        Write-Host "$($data.EpeatStatus)" -ForegroundColor $epeatColor 
+        
         $statusColor = if ($data.Status -eq "PASS") { "Green" } else { "Red" }
-        Write-Host "STATUS AUDIT      : " -NoNewline
+        Write-Host "STATUS AUDIT SESI : " -NoNewline
         Write-Host "$($data.Status)" -ForegroundColor $statusColor
+        
         Write-Host "TOTAL SESI        : $($data.TotalSessions)"
         Write-Host "SESI REMOTE (RDP) : $($data.RemoteSessionCount)`n"
 
@@ -126,7 +183,6 @@ function controlCheckingRemoteSession{
                 # Sorot warna Kuning jika terdeteksi Remote/RDP, selain itu Cyan
                 $rowColor = if ($session.IsRemote) { "Yellow" } else { "Cyan" }
                 
-                # [PERUBAHAN 4]: Spasi '-ForegroundColor $rowColor' sudah ditambahkan.
                 Write-Host ("{0,-15} {1,-16} {2,-15} {3,-11} {4}" -f `
                     $session.Username, 
                     $session.SessionType, 
