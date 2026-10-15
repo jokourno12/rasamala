@@ -88,21 +88,38 @@ function helperDataEpeat{
                     Sort-Object LastWriteTime -Descending | 
                     Select-Object -First 1
 
-    if ((-not $existingFile) -or (($today -$existingFile.LastWriteTime).Days -ge 3)){
-        Invoke-WebRequest -Uri "https://www.epeat.net/product-finder?menu[status]=Active" -SessionVariable session -UseBasicParsing | Out-Null
+    # Jalankan hanya jika database belum ada atau umurnya sudah >= 3 hari
+    if ((-not $existingFile) -or (($today - $existingFile.LastWriteTime).Days -ge 3)){
+        $totalHits = 0
 
-        Invoke-WebRequest -Uri "https://www.epeat.net/api/report/generate" `
-            -Method "POST" `
-            -WebSession $session `
-            -Headers @{
-                "accept"="*/*"
-                "origin"="https://www.epeat.net"
-                "referer"="https://www.epeat.net/product-finder"
-            } `
-            -ContentType "application/json" `
-            -Body '{"facets":{"status":["Active"]},"totalNumberOfResult":41626,"isAdvanced":false,"query":""}' `
-            -OutFile "$PSScriptRoot\..\Database\EPEAT_Export.xlsx"
+        # 1. Pancing error untuk menangkap ActualHits secara dinamis
+        try {
+            Invoke-RestMethod -Uri "https://www.epeat.net/api/report/generate" -Method POST -ContentType "application/json" -Body '{"facets":{"status":["Active"]},"isAdvanced":false,"query":""}' -ErrorAction Stop
+        } catch {
+            $errorJson =$_.ErrorDetails.Message | ConvertFrom-Json
+            $totalHits =$errorJson.ActualHits
+        }
 
-        etl
+        # 2. Eksekusi unduhan jika nilai totalHits berhasil didapat
+        if ($totalHits -gt 0) {
+            Invoke-WebRequest -Uri "https://www.epeat.net/product-finder?menu[status]=Active" -SessionVariable session -UseBasicParsing | Out-Null
+
+            # Gabungkan $totalHits ke string agar terbaca sebagai angka asli
+            $payload = '{"facets":{"status":["Active"]},"totalNumberOfResult":' + $totalHits + ',"isAdvanced":false,"query":""}'
+
+            Invoke-WebRequest -Uri "https://www.epeat.net/api/report/generate" `
+                -Method "POST" `
+                -WebSession $session `
+                -Headers @{
+                    "accept"="*/*"
+                    "origin"="https://www.epeat.net"
+                    "referer"="https://www.epeat.net/product-finder"
+                } `
+                -ContentType "application/json" `
+                -Body $payload `
+                -OutFile "$PSScriptRoot\..\Database\EPEAT_Export.xlsx"
+
+            etl
+        }
     }
 }
