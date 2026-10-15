@@ -1,15 +1,17 @@
 function controlAuditEndpoint{
-    $Global:HasilAudit = & {
-        routeProcessorStressTesting
-        routeCheckingUpdateSystem
-        routeStoragePerformanceTesting
-        routeNetworkPerimeterTesting
-        routeNetworkCoverageTesting
-        routeCheckingRemoteSession
-    } *>&1
-    
-    $cleanData = $Global:HasilAudit | Where-Object { $_ -is [PSCustomObject] }
+    $InformationPreference = 'SilentlyContinue'
 
-    $jsonResult = $cleanData | ConvertTo-Json -Depth 4
-    return $jsonResult
+    $auditResults = [ordered]@{
+        Timestamp          = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+        HostName           = $env:COMPUTERNAME
+        #ProcessorStress    = routeProcessorStressTesting -ReturnData
+        SystemUpdate       = routeCheckingUpdateSystem -ReturnData 6>$null
+        StoragePerformance = routeStoragePerformanceTesting -ReturnData 6>$null
+        NetworkPerimeter   = routeNetworkPerimeterTesting -ReturnData 6>$null
+        NetworkCoverage    = routeNetworkCoverageTesting -ReturnData 6>$null
+        #RemoteSession      = routeCheckingRemoteSession -ReturnData
+    }
+
+    # Output tunggal berbentuk JSON murni
+    return ($auditResults | ConvertTo-Json -Depth 5)
 }
