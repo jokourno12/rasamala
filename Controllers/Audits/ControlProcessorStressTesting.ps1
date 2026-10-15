@@ -1,7 +1,7 @@
 . $PSScriptRoot\..\..\Config\Windows.ps1
 
 function controlProcessorStressTesting{
-Write-Host "`n[+] Mempersiapkan Beban Kerja Absolut..." -ForegroundColor Cyan
+Write-Host "`n[+] Preparing for Absolute Workload..." -ForegroundColor Cyan
 
 $code = @"
 using System;
@@ -10,7 +10,6 @@ using System.Diagnostics;
 
 public class EmpiricalBenchmark {
     public static double Run() {
-        // Beban kerja: 4 Miliar kalkulasi floating-point kompleks
         long totalWork = 4000000000;
         int cores = Environment.ProcessorCount;
         long chunk = totalWork / cores;
@@ -22,7 +21,6 @@ public class EmpiricalBenchmark {
         Parallel.For(0, cores, i => {
             double result = 0;
             for(long j = 1; j <= chunk; j++) {
-                // Kalkulasi berat untuk memforsir logic unit pada prosesor
                 result += Math.Sqrt(j) + Math.Sin(j);
             }
             lock(lockObj) { finalSum += result; }
@@ -34,10 +32,12 @@ public class EmpiricalBenchmark {
 }
 "@
 
-Add-Type -TypeDefinition $code -ErrorAction SilentlyContinue
+if (-not ("EmpiricalBenchmark" -as [type])) {
+    Add-Type -TypeDefinition $code -ErrorAction Stop
+}
 
-Write-Host "[+] Menghantam CPU dengan 4 Miliar Kalkulasi Paralel (100% Load)..." -ForegroundColor Yellow
-Write-Host "[+] Harap tunggu, kipas PC Anda mungkin akan berputar lebih kencang...`n" -ForegroundColor Yellow
+Write-Host "[+] Hitting the CPU with 4 Billion Parallel Calculations (100% Load)..." -ForegroundColor Yellow
+Write-Host "[+] Please wait, your PC fan will probably spin faster...`n" -ForegroundColor Yellow
 
 $waktuMs = [EmpiricalBenchmark]::Run()
 $waktuDetik = [math]::Round($waktuMs / 1000, 2)
@@ -62,11 +62,11 @@ if ($waktuDetik -le 4.5) {
 }
 
 Write-Host "==================================================" -ForegroundColor White
-Write-Host " HASIL KEKUATAN MURNI (EMPIRICAL STRESS TEST)" -ForegroundColor Cyan
+Write-Host " EMPIRICAL STRESS TEST " -ForegroundColor Cyan
 Write-Host "==================================================" -ForegroundColor White
-Write-Host " Waktu Selesai : $waktuDetik detik"
-Write-Host " Skor Performa : $score Poin"
+Write-Host " Time Completed    : $waktuDetik detik"
+Write-Host " Performance Score : $score Poin"
 Write-Host "--------------------------------------------------"
-Write-Host " KELAS PC ANDA : $kategori" -ForegroundColor $warna
+Write-Host " YOUR PC CLASS : $kategori" -ForegroundColor $warna
 Write-Host "==================================================`n" -ForegroundColor White
 }
