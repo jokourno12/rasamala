@@ -49,7 +49,7 @@ if ($AuditEndpoint){
 }
 
 if ($ProcessorStressTesting){
-    routeProcessorStressTesting
+    routeProcessorStressTesting | Out-Null
 }
 
 if ($CheckingUpdateSystem){
@@ -65,11 +65,11 @@ if ($NetworkPerimeterTesting){
 }
 
 if ($NetworkCoverageTesting){
-    routeNetworkCoverageTesting
+    routeNetworkCoverageTesting | Out-Null
 }
 
 if ($CheckingRemoteSession){
-    routeCheckingRemoteSession
+    routeCheckingRemoteSession | Out-Null
 }
 
 # Operation

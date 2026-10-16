@@ -61,6 +61,12 @@ if ($waktuDetik -le 4.5) {
     $warna = "Gray"
 }
 
+    $processorResult = [PSCustomObject]@{
+        TimeCompletedSeconds = $waktuDetik
+        PerformanceScore     = $score
+        PCClass              = $kategori
+    }
+
 Write-Host "==================================================" -ForegroundColor White
 Write-Host " EMPIRICAL STRESS TEST " -ForegroundColor Cyan
 Write-Host "==================================================" -ForegroundColor White
@@ -69,4 +75,6 @@ Write-Host " Performance Score : $score Poin"
 Write-Host "--------------------------------------------------"
 Write-Host " YOUR PC CLASS : $kategori" -ForegroundColor $warna
 Write-Host "==================================================`n" -ForegroundColor White
+
+    return $processorResult
 }
