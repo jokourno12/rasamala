@@ -442,6 +442,8 @@ $aggregatedResults = foreach ($group in $networkAuditResult.OutboundDetails | Gr
     }
 }
 
+    $aggregatedResults | Sort-Object PROCESS | Format-Table -AutoSize | Out-String | Write-Host
+
     $networkAuditResult | Add-Member -NotePropertyName "AggregatedSockets" -NotePropertyValue $aggregatedResults
 
     return $networkAuditResult
