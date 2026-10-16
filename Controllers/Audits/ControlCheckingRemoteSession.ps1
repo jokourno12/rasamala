@@ -10,6 +10,7 @@ function controlCheckingRemoteSession{
     $liteDbDll = "$libPath\LiteDB.dll"
 
     $sessions = @()
+    $remoteSessionData = $null
 
     # ==========================================
     # 1. WINDOWS: Menggunakan 'quser.exe'
@@ -77,10 +78,9 @@ function controlCheckingRemoteSession{
         
         # KONSOLIDASI & TAMPILKAN HASIL KHUSUS WINDOWS
         $activeRemoteSessions = @($sessions | Where-Object { $_.IsRemote -eq $true })
-        $auditResults['RemoteSession'] = [PSCustomObject]@{
+        $remoteSessionData = [PSCustomObject]@{
             OSPlatform         = "Windows"
             HardwareModel      = $hardwareModel
-            # [PERUBAHAN: Memasukkan variabel $epeatStatus hasil query database, bukan string hardcode]
             EpeatStatus        = $epeatStatus 
             Status             = if ($activeRemoteSessions.Count -gt 0) { "FAIL" } else { "PASS" }
             TotalSessions      = $sessions.Count
@@ -134,10 +134,9 @@ function controlCheckingRemoteSession{
         
         # KONSOLIDASI & TAMPILKAN HASIL KHUSUS LINUX/MACOS
         $activeRemoteSessions = @($sessions | Where-Object { $_.IsRemote -eq $true })
-        $auditResults['RemoteSession'] = [PSCustomObject]@{
+        $remoteSessionData = [PSCustomObject]@{
             OSPlatform         = $osName
             HardwareModel      = $hardwareModel
-            # Pada Linux belum kita pasang pencarian ke DB
             EpeatStatus        = "Unregistered" 
             Status             = if ($activeRemoteSessions.Count -gt 0) { "FAIL" } else { "PASS" }
             TotalSessions      = $sessions.Count
@@ -149,38 +148,36 @@ function controlCheckingRemoteSession{
     # ==========================================
     # 3. CETAK KE LAYAR (UI REPORTING)
     # ==========================================
-    if ($null -ne $auditResults['RemoteSession']) {
-        $data = $auditResults['RemoteSession']
-
+    if ($null -ne $remoteSessionData) {
+        # [PERBAIKAN 4]: Kita buat string output kustom (Custom Formatting) dan kirim utuh
+        # ke Write-Host agar semuanya masuk ke Stream 6 (dan hilang saat mode 6>$null).
+        # Penggunaan Write-Host secara langsung juga sudah aman.
+        
         Write-Host "`n==================================================" -ForegroundColor Cyan
-        # [PERUBAHAN: Menyesuaikan judul ringkasan]
-        Write-Host " [ REMOTE SESSION & SUSTAINABILITY ($($data.OSPlatform)) ]" -ForegroundColor Yellow
+        Write-Host " [ REMOTE SESSION & SUSTAINABILITY ($($remoteSessionData.OSPlatform)) ]" -ForegroundColor Yellow
         Write-Host "==================================================" -ForegroundColor Cyan
 
-        # [TAMBAHAN: Menampilkan informasi Hardware dan EPEAT dari data.HardwareModel dan data.EpeatStatus]
-        $epeatColor = if ($data.EpeatStatus -eq "Unregistered") { "Red" } else { "Green" }
-        Write-Host "HARDWARE MODEL    : $($data.HardwareModel)"
+        $epeatColor = if ($remoteSessionData.EpeatStatus -eq "Unregistered") { "Red" } else { "Green" }
+        Write-Host "HARDWARE MODEL    : $($remoteSessionData.HardwareModel)"
         Write-Host "EPEAT 1.0         : " -NoNewline
-        Write-Host "$($data.EpeatStatus)" -ForegroundColor $epeatColor 
+        Write-Host "$($remoteSessionData.EpeatStatus)" -ForegroundColor $epeatColor 
         
-        $statusColor = if ($data.Status -eq "PASS") { "Green" } else { "Red" }
+        $statusColor = if ($remoteSessionData.Status -eq "PASS") { "Green" } else { "Red" }
         Write-Host "STATUS AUDIT SESI : " -NoNewline
-        Write-Host "$($data.Status)" -ForegroundColor $statusColor
+        Write-Host "$($remoteSessionData.Status)" -ForegroundColor $statusColor
         
-        Write-Host "TOTAL SESI        : $($data.TotalSessions)"
-        Write-Host "SESI REMOTE (RDP) : $($data.RemoteSessionCount)`n"
+        Write-Host "TOTAL SESI        : $($remoteSessionData.TotalSessions)"
+        Write-Host "SESI REMOTE (RDP) : $($remoteSessionData.RemoteSessionCount)`n"
 
         Write-Host "==================================================" -ForegroundColor Cyan
         Write-Host " [ DETAIL SESI AKTIF ]" -ForegroundColor Yellow
         Write-Host "==================================================" -ForegroundColor Cyan
 
-        # Header Tabel Konsisten
         Write-Host "USERNAME        SESSION TYPE     REMOTE HOST     IS REMOTE   STATE" -ForegroundColor Green
         Write-Host "--------        ------------     -----------     ---------   -----" -ForegroundColor Green
 
-        if ($data.Details.Count -gt 0) {
-            foreach ($session in $data.Details) {
-                # Sorot warna Kuning jika terdeteksi Remote/RDP, selain itu Cyan
+        if ($remoteSessionData.Details.Count -gt 0) {
+            foreach ($session in $remoteSessionData.Details) {
                 $rowColor = if ($session.IsRemote) { "Yellow" } else { "Cyan" }
                 
                 Write-Host ("{0,-15} {1,-16} {2,-15} {3,-11} {4}" -f `
@@ -188,11 +185,15 @@ function controlCheckingRemoteSession{
                     $session.SessionType, 
                     $session.RemoteHost, 
                     $session.IsRemote, 
-                    $session.State)
+                    $session.State) -ForegroundColor $rowColor
             }
         } else {
             Write-Host "Tidak ada sesi aktif yang terdeteksi." -ForegroundColor DarkGray
         }
         Write-Host ""
+        
+        # [PERBAIKAN 5]: Ini yang paling penting. Kembalikan (return) objek data ke Pipeline (Stream 1)
+        # agar bisa ditangkap oleh ConvertTo-Json di index.ps1
+        return $remoteSessionData
     }
 }
