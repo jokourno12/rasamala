@@ -31,7 +31,7 @@ param(
     [string]$TargetUrl = "about:blank"
 )
 
-#Support
+. $PSScriptRoot\Config\Windows.ps1
 . $PSScriptRoot\Helpers\Banner.ps1
 . $PSScriptRoot\Helpers\SlaInfo.ps1
 . $PSScriptRoot\Routes\Audit.ps1
@@ -49,7 +49,7 @@ if ($AuditEndpoint){
 }
 
 if ($ProcessorStressTesting){
-    routeProcessorStressTesting | Out-Null
+    routeProcessorStressTesting
 }
 
 if ($CheckingUpdateSystem){

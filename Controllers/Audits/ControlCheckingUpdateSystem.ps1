@@ -1,5 +1,3 @@
-. $PSScriptRoot\..\..\Config\Windows.ps1
-
 function controlCheckingUpdateSystem{
     if ($IsWindows) {
         Write-Host "[Windows] Memeriksa Windows Update Agent..." @Net
