@@ -1,5 +1,3 @@
-. $PSScriptRoot\..\..\Config\Windows.ps1
-
 function controlNetworkCoverageTesting{
     Write-Host "`n[*] Memulai Audit Network, Coverage & Sockets..." -ForegroundColor Cyan
 
