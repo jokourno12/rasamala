@@ -1,10 +1,10 @@
 function controlNetworkCoverageTesting{
-    Write-Host "`n[*] Memulai Audit Network, Coverage & Sockets..." -ForegroundColor Cyan
-
     # Inisialisasi variabel penampung
     $inboundPorts = @()
     $outboundConns = @()
     $osPlatform = if ($IsWindows) { "Windows" } elseif ($IsLinux) { "Linux" } else { "macOS" }
+    
+    Write-Host "`n[$osPlatform] Memeriksa Kualitas Sinyal, Coverage & Outbound Sockets..." @Net
 
     # ==========================================
     # [BARU] 0. NETWORK COVERAGE & LATENCY AUDIT
@@ -18,7 +18,6 @@ function controlNetworkCoverageTesting{
 
     if ($IsWindows) {
         try {
-            Write-Host "[+] Memeriksa Kualitas Sinyal & Coverage..." -ForegroundColor Green
             # Cari Default Gateway dan Adapter Jaringan aktif
             $routes = Get-NetRoute -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue | Sort-Object RouteMetric
             $route = $null
@@ -138,7 +137,6 @@ function controlNetworkCoverageTesting{
     }
 
     elseif ($IsLinux) {
-        Write-Host "[+] Memeriksa Kualitas Sinyal & Coverage (Linux)..." -ForegroundColor Green
         try {
             # Ambil Default Gateway dari tabel routing kernel Linux
             $defaultRoute = ip -4 route show default 2>/dev/null | Select-Object -First 1
@@ -208,8 +206,6 @@ function controlNetworkCoverageTesting{
     # 1. WINDOWS: Menggunakan Get-NetTCPConnection
     # ==========================================
     if ($IsWindows) {
-        Write-Host "[+] Menjalankan modul Socket Audit OS: WINDOWS" -ForegroundColor Green
-        
         try {
             # --- A. Inbound / Listening Ports ---
             $listenConns = Get-NetTCPConnection -State Listen -ErrorAction Stop
@@ -243,8 +239,6 @@ function controlNetworkCoverageTesting{
     # 2. LINUX: Menggunakan utilitas 'ss'
     # ==========================================
     elseif ($IsLinux) {
-        Write-Host "[+] Menjalankan modul Socket Audit OS: LINUX" -ForegroundColor Green
-        
         if (Get-Command ss -ErrorAction SilentlyContinue) {
             # --- A. Inbound / Listening Ports ---
             $linesListen = ss -tln 2>/dev/null | Select-String "LISTEN"
@@ -288,9 +282,7 @@ function controlNetworkCoverageTesting{
     # ==========================================
     # 3. MACOS: Menggunakan utilitas 'lsof'
     # ==========================================
-    elseif ($IsMacOS) {
-        Write-Host "[+] Menjalankan modul Socket Audit OS: MACOS" -ForegroundColor Green
-        
+    elseif ($IsMacOS) {     
         if (Get-Command lsof -ErrorAction SilentlyContinue) {
             # --- A. Inbound / Listening Ports ---
             $linesListen = lsof -iTCP -sTCP:LISTEN -P -n 2>/dev/null
@@ -328,14 +320,57 @@ function controlNetworkCoverageTesting{
     # ==========================================
     # 4. KONSOLIDASI & FORMAT OUTPUT
     # ==========================================
-    $inboundPorts = $inboundPorts | Select-Object -Unique | Sort-Object | Where-Object { $_ -ne $null }
-    $portList = if ($inboundPorts) { $inboundPorts -join ", " } else { "None" }
+    $inboundPorts = $inboundPorts | Select-Object -Unique | Sort-Object | Where-Object {$_ -ne $null }
+    $portList = if ($inboundPorts) {$inboundPorts -join ", " } else { "None" }
 
     # Status Keseluruhan mempertimbangkan Coverage dan Sockets
     $auditStatus = "PASS"
-    if ($outboundConns.Count -gt 50 -or $inboundPorts.Count -gt 15) { $auditStatus = "WARNING" }
-    if ($coverageStatus -eq "POOR") { $auditStatus = "WARNING" }
+    if ($outboundConns.Count -gt 50 -or $inboundPorts.Count -gt 15) {$auditStatus = "WARNING" }
+    if ($coverageStatus -eq "POOR" -or $coverageStatus -eq "CRITICAL") { $auditStatus = "WARNING" }
 
+    # Eksekusi proses pengumpulan data untuk Outbound Sockets
+    $aggregatedResults = foreach ($group in $outboundConns | Group-Object ProcessName) {
+        $procName =$group.Name
+        $allPids = ($group.Group.PID | Select-Object -Unique) -join ', '
+        $socketCount =$group.Count
+        $firstPid = $group.Group[0].PID
+        $statusTag = "[UNKNOWN]"
+        $publisher = "Unknown Publisher"
+        $riskLevel = "LOW"
+        
+        $proc = Get-Process -Id $firstPid -ErrorAction SilentlyContinue
+        
+        if ($proc -and$proc.Path) {
+            if ($IsWindows) {
+                $sig = Get-AuthenticodeSignature -FilePath 	$proc.Path -ErrorAction SilentlyContinue
+                if ($sig -and $sig.Status -eq 'Valid') {$statusTag = "[VALID]" }
+                else { $statusTag = "[UNSIGNED]"; $riskLevel = "HIGH" }
+                    
+                $company = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($proc.Path).CompanyName
+                if (-not [string]::IsNullOrWhiteSpace($company)) { $publisher =$company.Trim() }
+            } 
+            elseif ($IsLinux -or $IsMacOS) {
+                if ($proc.Path -match '^/(usr/)?(s)?bin/' -or $proc.Path -match '^/lib') {
+                    $statusTag = "[VALID]"; $publisher = "System / OS Core Binary"
+                } else {
+                    $statusTag = "[UNVERIFIED]"; $publisher = "User / Third-Party Binary"
+                }
+            }
+            
+            if ($proc.Path -match 'AppData\\Local\\Temp') {
+                $statusTag = "[!] SUSPICIOUS"; $riskLevel = "HIGH"
+            }
+        } else {
+            $statusTag = "[PROTECTED]"
+            if ($firstPid -eq 4 -or $procName -match "System") { $publisher = "NT AUTHORITY / OS Core" }
+            elseif ($procName -match "svchost") { $publisher = "Windows Core Service" }
+            else { $publisher = "System Service (Admin Only)" }
+        }
+        
+        "`n  - $procName (PID: $allPids) | $statusTag : $socketCount Sockets"
+    }
+
+    # [DIKEMBALIKAN KE STRUKTUR ASLI] agar tidak merusak format -auditendpoint
     $networkAuditResult = [PSCustomObject]@{
         OSPlatform               = $osPlatform
         Status                   = $auditStatus
@@ -350,99 +385,19 @@ function controlNetworkCoverageTesting{
         OutboundDetails          = @($outboundConns)
     }
 
-    Write-Host "`n==================================================" -ForegroundColor Cyan
-    Write-Host " [ RINGKASAN STATUS & COVERAGE ]" -ForegroundColor Yellow
-    Write-Host "==================================================" -ForegroundColor Cyan
-    
-    # Menampilkan Tabel 1: Murni Coverage (Tanpa Sockets)
-    $networkAuditResult | Select-Object `
-        @{Name="STATUS"; Expression={$_.CoverageStatus}},
-        @{Name="INTERFACE"; Expression={$_.InterfaceType}},
-        @{Name="SIGNAL / SPEED"; Expression={$_.SignalOrSpeed}},
-        @{Name="LATENCY"; Expression={$_.LatencyStr}},
-        @{Name="COVERAGE TESTED"; Expression={$_.CoverageTier}} | 
-        Format-Table -AutoSize | Out-String | Write-Host
-
-    Write-Host "==================================================" -ForegroundColor Cyan
-    Write-Host " [ DETAIL KONEKSI OUTBOUND ($($networkAuditResult.OutboundConnectionsCount) Koneksi Aktif) ]" -ForegroundColor Yellow
-    Write-Host "==================================================" -ForegroundColor Cyan
-    
-$aggregatedResults = foreach ($group in $networkAuditResult.OutboundDetails | Group-Object PID) {
-    $pidNum = $group.Name
-    $procName = $group.Group[0].ProcessName
-    $socketCount = $group.Count
-    
-    # Nilai default
-    $statusTag = "[UNKNOWN]"
-    $publisher = "Unknown Publisher"
-    $riskLevel = "LOW"
-    
-    # 1. Ambil detail proses aktif
-    $proc = Get-Process -Id $pidNum -ErrorAction SilentlyContinue
-    
-    if ($proc -and $proc.Path) {
-        if ($IsWindows) {
-            # Jika PowerShell punya hak akses untuk membaca file EXE/DLL
-            $sig = Get-AuthenticodeSignature -FilePath $proc.Path -ErrorAction SilentlyContinue
-            if ($sig -and $sig.Status -eq 'Valid') {$statusTag = "[VALID]"
-            } else {
-                $statusTag = "[UNSIGNED]"
-                $riskLevel = "HIGH"
-            }
-                
-            # Ekstrak nama perusahaan / publisher dari file
-            $company = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($proc.Path).CompanyName
-            if (-not [string]::IsNullOrWhiteSpace($company)) {
-                $publisher =$company.Trim()
-            }
-        } 
-        elseif ($IsLinux -or$IsMacOS) {
-            # Linux/macOS tidak menggunakan Authenticode. 
-            # Gunakan validasi path hirarki sistem sebagai gantinya.
-            if ($proc.Path -match '^/(usr/)?(s)?bin/' -or $proc.Path -match '^/lib') {$statusTag = "[VALID]"
-                $publisher = "System / OS Core Binary"
-            } else {
-                $statusTag = "[UNVERIFIED]"
-                $publisher = "User / Third-Party Binary"
-            }
-        }
-        
-        # Heuristik lokasi mencurigakan
-        if ($proc.Path -match 'AppData\\Local\\Temp') {
-            $statusTag = "[!] SUSPICIOUS"
-            $riskLevel = "HIGH"
-        }
-    } else {
-        # Jika proses tidak bisa dibaca (butuh hak akses Admin / SYSTEM)
-        $statusTag = "[PROTECTED]"
-        if ($pidNum -eq 4 -or $procName -match "System") {
-            $publisher = "NT AUTHORITY / OS Core"
-        } elseif ($procName -match "svchost") {
-            $publisher = "Windows Core Service"
-        } else {
-            $publisher = "System Service (Admin Only)"
-        }
-    }
-    
-    # Heuristik ekstra untuk Living off the Land (LOLBins)
-    if ($procName -match 'cmd|powershell|wscript|cscript|rundll32') {
-        $riskLevel = "MEDIUM"
-        if ($statusTag -eq '[UNSIGNED]') { $riskLevel = "HIGH" }
-    }
-    
-    # Buat baris data
-    [PSCustomObject]@{
-        PROCESS = $procName
-        PID     = $pidNum
-        SOCKETS = $socketCount
-        'PUBLISHER / STATUS' = "$statusTag $publisher"
-        RISK    = $riskLevel
-    }
-}
-
-    $aggregatedResults | Sort-Object PROCESS | Format-Table -AutoSize | Out-String | Write-Host
-
     $networkAuditResult | Add-Member -NotePropertyName "AggregatedSockets" -NotePropertyValue $aggregatedResults
+
+    # Cetak ke layar dengan format Key-Value (Opsi 2) tanpa memengaruhi objek aslinya
+    $networkAuditResult | Select-Object `
+        @{Name="OS"; Expression={$_.OSPlatform}},
+        Status,
+        @{Name="Interface"; Expression={$_.InterfaceType}},
+        @{Name="LinkSpeed"; Expression={$_.SignalOrSpeed}},
+        @{Name="Latency"; Expression={$_.LatencyStr}},
+        @{Name="Coverage_Tested"; Expression={$_.CoverageTier}},
+        @{Name="TotalOutboundSockets"; Expression={$_.OutboundConnectionsCount}},
+        @{Name="TopSocketProcesses"; Expression={($_.AggregatedSockets | Sort-Object) -join ''}} | 
+        Format-List | Out-String | Write-Host
 
     return $networkAuditResult
 }
