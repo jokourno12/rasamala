@@ -1,7 +1,6 @@
 function controlCheckingRemoteSession{
-    Write-Host "`n[Windows] Memeriksa Status Remote Session & Sustainability..." @Net
+    Write-Host "`n[Windows] Checking Remote Session & Sustainability Status..." @Net
     
-    # [TAMBAHAN: Mendefinisikan path untuk LiteDB dan database sustainability.db]
     $databasePath = "$PSScriptRoot\..\..\Database"
     $libPath = "$PSScriptRoot\..\..\Helpers\Lib"
     $dbFile = "$databasePath\sustainability.db"
@@ -10,9 +9,6 @@ function controlCheckingRemoteSession{
     $sessions = @()
     $remoteSessionData = $null
 
-    # ==========================================
-    # 1. WINDOWS: Menggunakan 'quser.exe'
-    # ==========================================
     if ($IsWindows) {
         $quserOutput = quser.exe 2>$null
         
@@ -38,13 +34,11 @@ function controlCheckingRemoteSession{
             }
         }
 
-        # Dapatkan Model Hardware Windows
         $hwInfo = Get-CimInstance Win32_ComputerSystem
         #$hwInfo = [PSCustomObject]@{ Manufacturer = "Dell Inc."; Model = "OptiPlex 3000" }
         $hardwareModel = "$($hwInfo.Manufacturer) $($hwInfo.Model)"
         
-        # [TAMBAHAN: Logika pengecekan EPEAT Status dari LiteDB]
-        $epeatStatus = "Unregistered" # Default status jika tidak ditemukan
+        $epeatStatus = "Unregistered"
         
         if (Test-Path $dbFile) {
             if (Test-Path $liteDbDll) {
@@ -52,10 +46,8 @@ function controlCheckingRemoteSession{
                 $db = New-Object LiteDB.LiteDatabase("Filename=$dbFile;Connection=shared")
                 $collection = $db.GetCollection("epeat_products")
                 
-                # Membersihkan nama manufacturer (Misal: "Dell Inc." menjadi "Dell") agar mudah dicocokkan dengan "DELL" di DB
                 $cleanManufacturer = $hwInfo.Manufacturer -replace '(?i)\s*Inc\.?|\s*Corp\.?|\s*Ltd\.?', ''
                 
-                # Mencari produk di LiteDB menggunakan manipulasi PowerShell (case-insensitive)
                 $matchedProduct = $collection.FindAll() | Where-Object {
                     $_["manufacturer"].AsString -match $cleanManufacturer -and
                     $_["product_name"].AsString -match [regex]::Escape($hwInfo.Model)
@@ -67,13 +59,12 @@ function controlCheckingRemoteSession{
                 
                 $db.Dispose()
             } else {
-                Write-Host "[-] LiteDB.dll tidak ditemukan. Lewati pengecekan EPEAT." -ForegroundColor Yellow
+                Write-Host "[-] LiteDB.dll not found. Skip EPEAT checking." $Cha
             }
         } else {
-            Write-Host "[-] sustainability.db tidak ditemukan. Lewati pengecekan EPEAT." -ForegroundColor Yellow
+            Write-Host "[-] sustainability.db not found. Skip EPEAT checking." $Cha
         }
         
-        # KONSOLIDASI & TAMPILKAN HASIL KHUSUS WINDOWS
         $activeRemoteSessions = @($sessions | Where-Object { $_.IsRemote -eq $true })
         $remoteSessionData = [PSCustomObject]@{
             OSPlatform         = "Windows"
@@ -87,9 +78,6 @@ function controlCheckingRemoteSession{
         
     }
     
-    # ==========================================
-    # 2. LINUX & MACOS: Menggunakan perintah 'who'
-    # ==========================================
     elseif ($IsLinux -or $IsMacOS) {
         $osName = if ($IsLinux) { "LINUX" } else { "MACOS" }
         
@@ -125,10 +113,8 @@ function controlCheckingRemoteSession{
             }
         }
 
-        # Dapatkan Model Hardware Linux/MacOS dasar (Placeholder, jika ingin diperluas)
         $hardwareModel = "N/A (Cek DMI/dmidecode)"
         
-        # KONSOLIDASI & TAMPILKAN HASIL KHUSUS LINUX/MACOS
         $activeRemoteSessions = @($sessions | Where-Object { $_.IsRemote -eq $true })
         $remoteSessionData = [PSCustomObject]@{
             OSPlatform         = $osName
@@ -141,23 +127,18 @@ function controlCheckingRemoteSession{
         }
     }
 
-    # ==========================================
-    # 3. CETAK KE LAYAR (UI REPORTING)
-    # ==========================================
-    if ($null -ne$remoteSessionData) {
+    if ($null -ne $remoteSessionData) {
         
-        # [BARU] Menyusun format string untuk ActiveSessionsDetail berdasarkan Alternatif 2
         $formattedSessions = ""
         
         if ($remoteSessionData.Details.Count -gt 0) {$tempList = @()
-            foreach ($sessionItem in $remoteSessionData.Details) {$tempList += "`n                         - $($sessionItem.Username) | Type: $($sessionItem.SessionType) | Host: $($sessionItem.RemoteHost) | IsRemote: $($sessionItem.IsRemote) | State: $($sessionItem.State)"
+            foreach ($sessionItem in $remoteSessionData.Details) {$tempList += "`n- $($sessionItem.Username) | $($sessionItem.SessionType) | $($sessionItem.RemoteHost) | Remote $($sessionItem.IsRemote) | $($sessionItem.State)"
             }
             $formattedSessions = $tempList -join ""
         } else {
-            $formattedSessions = "`n                         - Tidak ada sesi aktif yang terdeteksi."
+            $formattedSessions = "`n- No active session detected."
         }
 
-        # [DIUBAH] Membuat objek khusus untuk tampilan yang dicetak via Format-List
         $displayObject = [PSCustomObject]@{
             OS                   = $remoteSessionData.OSPlatform
             Status               = $remoteSessionData.Status
@@ -168,10 +149,8 @@ function controlCheckingRemoteSession{
             ActiveSessionsDetail = $formattedSessions
         }
 
-        # [DIUBAH] Cetak ke layar menggunakan Format-List (Key-Value style)
         $displayObject | Format-List | Out-String | Write-Host
         
-        # [PERTAHANKAN] Objek data asli tetap direturn agar bisa ditangkap oleh ConvertTo-Json atau -auditendpoint
         return $remoteSessionData
     }
 }

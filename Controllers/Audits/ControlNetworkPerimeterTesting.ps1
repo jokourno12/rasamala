@@ -1,12 +1,9 @@
-. $PSScriptRoot\..\..\Config\Windows.ps1
-
 function controlNetworkPerimeterTesting{
     $osName = "Unknown"
     $fwType = "Unknown"
     $fwStatus = $null
     $fwMessage = ""
     
-    # Variabel Default Modul Roaming
     $roamingActive = $false
     $roamingMessage = "Tidak ada koneksi jaringan aktif."
     $bssid = "N/A"
@@ -21,21 +18,17 @@ function controlNetworkPerimeterTesting{
     $mtuTag    = "N/A"
     $gwIP      = $null
 
-    # ==========================================
-    # 1. KODE FIREWALL (WINDOWS)
-    # ==========================================
     if ($IsWindows) {
         $osName = "Windows"
         $fwType = "Windows Defender Firewall"
-        Write-Host "[Windows] Memeriksa Firewall, Kualitas Sinyal & Perimeter Roaming..." @Net
+        Write-Host "[Windows] Checking Firewall, Signal Quality & Roaming Perimeter..." @Net
         
-        # [A] Cek Firewall
         try {
             $profiles = Get-NetFirewallProfile -ErrorAction Stop
             $disabledProfiles = $profiles | Where-Object { $_.Enabled -eq $false -or $_.Enabled -eq 2 -or $_.Enabled -match "False" }
             
             if ($disabledProfiles.Count -eq 0) {
-                $fwStatus = $true; $fwMessage = "Semua profil Firewall aktif."
+                $fwStatus = $true; $fwMessage = "All Firewall profiles are active."
             } else {
                 $fwStatus = $false; $names = ($disabledProfiles.Name) -join ", "
                 $fwMessage = "Profil Firewall OFF: $names."
@@ -43,14 +36,11 @@ function controlNetworkPerimeterTesting{
         }
         catch {
             $netshStatus = netsh advfirewall show allprofiles state 2>&1 | Out-String
-            if ($netshStatus -match "State\s+OFF") { $fwStatus = $false; $fwMessage = "Ada profil Firewall dalam keadaan OFF." }
-            elseif ($netshStatus -match "State\s+ON") { $fwStatus = $true; $fwMessage = "Windows Firewall aktif." }
-            else { $fwStatus = $null; $fwMessage = "Status Firewall tidak dapat dipastikan (Access Denied)." }
+            if ($netshStatus -match "State\s+OFF") { $fwStatus = $false; $fwMessage = "There is a Firewall profile in the OFF state." }
+            elseif ($netshStatus -match "State\s+ON") { $fwStatus = $true; $fwMessage = "Windows Firewall is active." }
+            else { $fwStatus = $null; $fwMessage = "Firewall status cannot be ascertained (Access Denied)." }
         }
 
-        # ==========================================
-        # 2. MODUL ROAMING, SIGNAL & LATENCY (WINDOWS)
-        # ==========================================
         try {
             $wifiAdapter = Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { 
                 $_.Status -eq "Up" -and ($_.InterfaceDescription -match "Wireless|Wi-Fi|802.11" -or $_.Name -match "Wi-Fi") 
@@ -64,10 +54,8 @@ function controlNetworkPerimeterTesting{
                 }
                 if ($netProfile) { $ssid = $netProfile.Name }
 
-                # Ekstrak BSSID dan Signal (%) dari netsh
                 $wlanRaw = netsh wlan show interfaces 2>&1 | Out-String
                 
-                # Cek apakah terbentur proteksi Privasi Lokasi atau Hak Akses Admin
                 if ($wlanRaw -match "Location permission" -or $wlanRaw -match "error 5") {
                     $bssid = "Requires Admin / Location Perm"
                     $signalPercent = "N/A"
@@ -83,16 +71,13 @@ function controlNetworkPerimeterTesting{
                     }
                 }
 
-                # Uji Latensi ke Default Gateway
                 $gateway = Get-NetIPConfiguration -ErrorAction SilentlyContinue | Where-Object { $_.IPv4DefaultGateway } | Select-Object -First 1
                 if ($gateway) {
                     $gwIP = $gateway.IPv4DefaultGateway.NextHop
-                    # Ping 3x ke Router
                     $pingResult = Test-Connection -ComputerName $gwIP -Count 3 -ErrorAction SilentlyContinue
                     if ($pingResult) {
                         $packetLoss = [math]::Round(((3 - $pingResult.Count) / 3) * 100)
                         
-                        # Dukungan lintas versi PS5.1 (ResponseTime) dan PS7+ (Latency)
                         $times = $pingResult | ForEach-Object { if ($null -ne $_.ResponseTime) { $_.ResponseTime } elseif ($null -ne $_.Latency) { $_.Latency } }
                         if ($times) { $avgLatency = [math]::Round(($times | Measure-Object -Average).Average) }
                     }
@@ -111,7 +96,6 @@ function controlNetworkPerimeterTesting{
                     }
 
                     try {
-                        # Resolve one.one.one.one lewat TCP ke 1.1.1.1
                         $dnsTest = Resolve-DnsName -Name "one.one.one.one" -Server "1.1.1.1" -TcpOnly -ErrorAction SilentlyContinue
                         if ($dnsTest) {$dnsTag = "CLEAN (Public Resolver Valid)"
                         } else {
@@ -135,64 +119,56 @@ function controlNetworkPerimeterTesting{
 
                 }
 
-                # Susun Pesan Roaming
                 $signalMsg = "Sinyal: $signalPercent% ($rssi dBm), Latency GW: $($avgLatency)ms, Loss: $($packetLoss)%"
                 if ($bssid -ne "") {
-                    $roamingMessage = "Wi-Fi Aktif | SSID: $ssid | BSSID: $bssid | $signalMsg"
+                    $roamingMessage = "Wi-Fi Active | SSID: $ssid | BSSID: $bssid | $signalMsg"
                 } elseif ($ssid -ne "") {
-                    $roamingMessage = "Wi-Fi Aktif | SSID: $ssid (BSSID hidden) | $signalMsg"
+                    $roamingMessage = "Wi-Fi Active | SSID: $ssid (BSSID hidden) | $signalMsg"
                 } else {
-                    $roamingMessage = "Wi-Fi Aktif ($($wifiAdapter.InterfaceDescription)) | $signalMsg"
+                    $roamingMessage = "Wi-Fi Active ($($wifiAdapter.InterfaceDescription)) | $signalMsg"
                 }
             } else {
                 $roamingActive = $false
-                $roamingMessage = "Tidak ada koneksi Wi-Fi aktif."
+                $roamingMessage = "No Wi-Fi connection is active."
             }
         } catch {
-            $roamingMessage = "Gagal membaca metrik Roaming/Wi-Fi: $($_.Exception.Message)"
+            $roamingMessage = "Failed to read Roaming/Wi-Fi metrics: $($_.Exception.Message)"
         }
         $gateway = Get-NetIPConfiguration -ErrorAction SilentlyContinue | Where-Object {$_.IPv4DefaultGateway } | Select-Object -First 1
         if ($gateway) { 
             $gwIP = $gateway.IPv4DefaultGateway.NextHop
-            if (-not $roamingActive) {$roamingMessage = "Koneksi LAN Aktif ($gwIP)"
+            if (-not $roamingActive) {$roamingMessage = "Active LAN Connection ($gwIP)"
             } else {
                 $roamingMessage = "Wi-Fi Aktif | SSID: $ssid | BSSID: $bssid | Sinyal: $signalPercent\% ($rssi dBm)"
             }
         }
     }
 
-    # ==========================================
-    # 3. KODE FIREWALL (LINUX)
-    # ==========================================
     elseif ($IsLinux) {
         $osName = "Linux"
-        Write-Host "[Linux] Memeriksa status UFW/Firewalld..." @Net
+        Write-Host "[Linux] Testing UFW/Firewalld status..." @Net
         $fwStatus = $false 
-        $fwMessage = "Layanan Firewall tidak terdeteksi."
+        $fwMessage = "Firewall service not detected."
 
-        if (Get-Command ufw -ErrorAction SilentlyContinue) { $fwStatus = $true; $fwType = "UFW"; $fwMessage = "UFW Aktif." }
+        if (Get-Command ufw -ErrorAction SilentlyContinue) { $fwStatus = $true; $fwType = "UFW"; $fwMessage = "UFW Active." }
 
         $defaultRoute = ip -4 route show default 2>/dev/null | Select-Object -First 1
         if ($defaultRoute -match 'default via (\S+)') { 
             $gwIP = $matches[1]
             if (-not $roamingActive) {
-                $roamingMessage = "Koneksi LAN Aktif ($gwIP)"
+                $roamingMessage = "Active LAN Connection ($gwIP)"
             }
         }
     }
 
-    # ==========================================
-    # 4. KODE FIREWALL (macOS)
-    # ==========================================
     elseif ($IsMacOS) {
         $osName = "macOS"
-        Write-Host "[macOS] Memeriksa Application Layer Firewall..." @Net
-        $fwStatus = $false; $fwMessage = "ALF tidak terdeteksi."
+        Write-Host "[macOS] Testing the Application Layer Firewall..." @Net
+        $fwStatus = $false; $fwMessage = "ALF is not detected."
         # ... (Logika macOS tetap sama seperti sebelumnya) ...
     }
 
     if ($gwIP) {
-        # [A] Ping & Packet Loss
         $pingResult = Test-Connection -ComputerName $gwIP -Count 3 -ErrorAction SilentlyContinue
         if ($pingResult) {
             $packetLoss = [math]::Round(((3 - $pingResult.Count) / 3) * 100)
@@ -200,7 +176,6 @@ function controlNetworkPerimeterTesting{
             if ($times) { $avgLatency = [math]::Round(($times | Measure-Object -Average).Average) }
         }
 
-        # [B] Egress Filtering (Port 445 SMB)
         try {
             $tcpClient = New-Object System.Net.Sockets.TcpClient
             $asyncResult = $tcpClient.BeginConnect("1.1.1.1", 445, $null, $null)
@@ -214,7 +189,6 @@ function controlNetworkPerimeterTesting{
             $egressTag = "RESTRICTED (Port 445/SMB Blocked)"
         }
 
-        # [C] DNS Tampering (Resolusi one.one.one.one)
         try {
             if ($IsWindows) {$dnsTest = Resolve-DnsName -Name "one.one.one.one" -Server "1.1.1.1" -TcpOnly -ErrorAction SilentlyContinue
                 if ($dnsTest) { $dnsTag = "CLEAN (Public Resolver Valid)" } else { $dnsTag = "SUSPICIOUS (Possible Corporate DNS Intercepted)" }
@@ -225,7 +199,6 @@ function controlNetworkPerimeterTesting{
             $dnsTag = "SUSPICIOUS (DNS Intercepted)"
         }
 
-        # [D] Path MTU Discovery
         try {
             if ($IsWindows) {
                 $ping1500 = ping.exe -f -n 1 -w 1000 -l 1472 $gwIP 2>&1 | Out-String
@@ -251,9 +224,6 @@ function controlNetworkPerimeterTesting{
         $roamingMessage += " [Offline / Gateway Not Found]"
     }
 
-    # ==========================================
-    # 5. EVALUASI STATUS & OUTPUT JSON
-    # ==========================================
     $finalStatus = "OK"
     $statusReason = @()
 
@@ -265,7 +235,7 @@ function controlNetworkPerimeterTesting{
 
     if ($roamingActive -and $rssi -ne "N/A" -and $rssi -lt -75 -and $rssi -ne 0) { 
         $finalStatus = "WARNING"
-        $statusReason += "Sinyal Sangat Lemah ($rssi dBm)"
+        $statusReason += "Very Weak Signal ($rssi dBm)"
     }
 
     if ($packetLoss -gt 0 -and $packetLoss -lt 100) {
@@ -278,7 +248,7 @@ function controlNetworkPerimeterTesting{
 
     if ($egressTag -match "PERMISSIVE") {
         $finalStatus = "WARNING"
-        $statusReason += "Egress Port Terbuka"
+        $statusReason += "Egress Port Open"
     }
     if ($dnsTag -match "SUSPICIOUS") {
         $finalStatus = "WARNING"

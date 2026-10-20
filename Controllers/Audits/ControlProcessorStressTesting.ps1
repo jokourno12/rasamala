@@ -1,11 +1,10 @@
 function controlProcessorStressTesting{
-    # 1. Tampilkan teks header sesuai OS
     if ($IsWindows) {
-        Write-Host "`n[Windows] Memeriksa Kinerja Prosesor (Stress Test)..." @Net
+        Write-Host "`n[Windows] Testing Processor Performance..." @Net
     } elseif ($IsLinux) {
-        Write-Host "`n[Linux] Memeriksa Kinerja Prosesor (Stress Test)..." @Net
+        Write-Host "`n[Linux] Testing Processor Performance..." @Net
     } else {
-        Write-Host "`n[*] Memeriksa Kinerja Prosesor (Stress Test)..." @Net
+        Write-Host "`n[*] Testing Processor Performance..." @Net
     }
 
     $code = @"
@@ -57,7 +56,6 @@ function controlProcessorStressTesting{
 
     $osName = if ($IsWindows) { "Windows" } elseif ($IsLinux) { "Linux" } elseif ($IsMacOS) { "macOS" } else { "Unknown" }
 
-    # 2. Tambahkan properti OS dan Module agar berjumlah 5 properti sehingga otomatis dicetak menurun (List)
     $processorResult = [PSCustomObject]@{
         OS                   = $osName
         Module               = "Processor Stress Test"

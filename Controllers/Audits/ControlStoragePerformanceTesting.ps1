@@ -1,16 +1,11 @@
-. $PSScriptRoot\..\..\Config\Windows.ps1
-
 function controlStoragePerformanceTesting{
     $isEncrypted = "Unknown"
     $fdeType = "Unknown"
     $osName = "Unknown"
 
-    # ==========================================
-    # 1. PEMERIKSAAN ENKRIPSI DISK (KODE LAMA)
-    # ==========================================
     if ($IsWindows) {
         $osName = "Windows"
-        Write-Host "[Windows] Memeriksa status BitLocker & Performa Storage..." @Net
+        Write-Host "[Windows] Testing BitLocker & Storage Performance status..." @Net
         $fdeType = "BitLocker"
         try {
             $osDrive = $env:SystemDrive
@@ -18,7 +13,7 @@ function controlStoragePerformanceTesting{
             
             if ($volume.ProtectionStatus -eq 1) {
                 $isEncrypted = $true
-                $fdeMessage = "BitLocker aktif (Protection On) pada drive OS ($osDrive)."
+                $fdeMessage = "BitLocker is active (Protection On) on the OS drive ($osDrive)."
             } else {
                 $isEncrypted = "Requires Admin"
             }
@@ -27,28 +22,28 @@ function controlStoragePerformanceTesting{
             $bdeStatus = manage-bde -status $env:SystemDrive 2>&1 | Out-String
             if ($bdeStatus -match "Protection On") {
                 $isEncrypted = $true
-                $fdeMessage = "BitLocker aktif pada drive OS ($env:SystemDrive)."
+                $fdeMessage = "BitLocker is active on the OS drive ($env:SystemDrive)."
             } elseif ($bdeStatus -match "Protection Off") {
                 $isEncrypted = $false
-                $fdeMessage = "BitLocker TIDAK aktif pada drive OS ($env:SystemDrive)."
+                $fdeMessage = "BitLocker is NOT active on OS drives ($env:SystemDrive)."
             } else {
                 $isEncrypted = "Requires Admin"
-                $fdeMessage = "Status BitLocker: Butuh akses Administrator."
+                $fdeMessage = "Status BitLocker: Need Administrator access."
             }
         }
     }
     elseif ($IsLinux) {
         $osName = "Linux"
-        Write-Host "[Linux] Memeriksa status LUKS & Performa Storage..." @Net
+        Write-Host "[Linux] Testing LUKS & Performance Storage status..." @Net
         $fdeType = "LUKS"
         if (Get-Command lsblk -ErrorAction SilentlyContinue) {
             $lsblkOutput = lsblk -f 2>&1 | Out-String
             if ($lsblkOutput -match "crypto_LUKS") {
                 $isEncrypted = $true
-                $fdeMessage = "Partisi terenkripsi LUKS terdeteksi."
+                $fdeMessage = "LUKS encrypted partition detected."
             } else {
                 $isEncrypted = $false
-                $fdeMessage = "LUKS tidak terdeteksi."
+                $fdeMessage = "LUKS not detected."
             }
         } else {
             $isEncrypted = "Unknown"
@@ -56,29 +51,26 @@ function controlStoragePerformanceTesting{
     }
     elseif ($IsMacOS) {
         $osName = "macOS"
-        Write-Host "[macOS] Memeriksa status FileVault & Performa Storage..." @Net
+        Write-Host "[macOS] Testing FileVault & Storage Performance status..." @Net
         $fdeType = "FileVault"
         if (Get-Command fdesetup -ErrorAction SilentlyContinue) {
             $fdeStatus = fdesetup status 2>&1 | Out-String
             if ($fdeStatus -match "FileVault is On") {
                 $isEncrypted = $true
-                $fdeMessage = "FileVault aktif."
+                $fdeMessage = "FileVault is active."
             } elseif ($fdeStatus -match "FileVault is Off") {
                 $isEncrypted = $false
-                $fdeMessage = "FileVault TIDAK aktif."
+                $fdeMessage = "FileVault is NOT active."
             } else {
                 $isEncrypted = "Unknown"
-                $fdeMessage = "Status FileVault tidak diketahui."
+                $fdeMessage = "FileVault status unknown."
             }
         } else {
             $isEncrypted = "Unknown"
-            $fdeMessage = "Utility 'fdesetup' tidak ditemukan."
+            $fdeMessage = "Utility 'fdesetup' not found."
         }
     }
 
-    # ==========================================
-    # 2. PENGUJIAN PERFORMA (KODE BARU)
-    # ==========================================
     $writeSpeed = 0
     $readSpeed = 0
     $writeIops = 0
@@ -96,8 +88,6 @@ function controlStoragePerformanceTesting{
         $dummyData = New-Object byte[] $bufferSize
         (New-Object Random).NextBytes($dummyData)
 
-        # [PERBAIKAN] Menggunakan FileStream dengan flag WriteThrough untuk menembus RAM Cache OS.
-        # Ini memaksa pengujian terjadi murni pada hardware fisik (Direct I/O).
         $fs = New-Object System.IO.FileStream($testFile, [System.IO.FileMode]::Create, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None, 4096, [System.IO.FileOptions]::WriteThrough)
 
         # --- UJI SEQUENTIAL WRITE ---
@@ -116,8 +106,6 @@ function controlStoragePerformanceTesting{
         $readSpeed = [math]::Round(($testFileSizeMB / $sw.Elapsed.TotalSeconds), 2)
 
         # --- UJI RANDOM 4K IOPS ---
-        # [PERBAIKAN] Menambahkan pengujian IOPS dengan melompat ke lokasi acak pada file 
-        # dan membaca/menulis blok berukuran 4KB (4096 bytes) sebanyak 1000 iterasi.
         $iopsIterations = 1000
         $chunk4K = New-Object byte[] 4096
         $random = New-Object Random
@@ -142,7 +130,6 @@ function controlStoragePerformanceTesting{
 
         $fs.Close()
 
-        # [PERBAIKAN] Kategorisasi Storage Class berdasarkan hasil pengujian
         if ($readSpeed -gt 7000) { 
             $storageTested = "NVMe EXTREME"
             $forensicStatus = "Uncarvable (TRIM Active)"
@@ -160,7 +147,6 @@ function controlStoragePerformanceTesting{
             $forensicStatus = "Uncarvable (TRIM Active)"
         }
         else { 
-            # [PERBAIKAN] Kecepatan di bawah 200 MB/s diasumsikan sebagai HDD/eMMC tanpa fungsi TRIM
             $storageTested = "HDD / SLOW"
             $forensicStatus = "Carvable (TRIM Disabled / HDD)"
         }
@@ -177,10 +163,6 @@ function controlStoragePerformanceTesting{
         }
     }
 
-    # ==========================================
-    # 3. GABUNGKAN HASIL OUTPUT
-    # ==========================================
-    # Status keseluruhan: Jika enkripsi mati ($false) ATAU performa lambat, maka statusnya WARNING
     $finalStatus = $perfStatus
     if ($isEncrypted -eq $false) { $finalStatus = "WARNING" }
 

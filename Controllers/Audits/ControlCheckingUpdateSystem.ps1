@@ -1,6 +1,6 @@
 function controlCheckingUpdateSystem{
     if ($IsWindows) {
-        Write-Host "[Windows] Memeriksa Windows Update Agent..." @Net
+        Write-Host "[Windows] Checking Windows Update Agent..." @Net
         try {
             $session = New-Object -ComObject "Microsoft.Update.Session"
             $searcher = $session.CreateUpdateSearcher()
@@ -8,7 +8,6 @@ function controlCheckingUpdateSystem{
             $searchResult = $searcher.Search("IsInstalled=0 and IsHidden=0")
             $pendingCount = $searchResult.Updates.Count
             
-            # Kumpulkan detail nama update
             $updateDetails = @()
             if ($pendingCount -gt 0) {
                 foreach ($update in $searchResult.Updates) {
@@ -20,8 +19,8 @@ function controlCheckingUpdateSystem{
                 OS                  = "Windows"
                 IsUpToDate          = ($pendingCount -eq 0)
                 PendingUpdatesCount = $pendingCount
-                Message             = if ($pendingCount -eq 0) { "Sistem fully updated." } else { "Ada $pendingCount update tertunda." }
-                # Menggabungkan array menjadi satu string agar rapi saat ditampilkan di tabel
+                Message             = if ($pendingCount -eq 0) { "System fully updated." } else { "$pendingCount pending update" }
+
                 PendingDetails      = if ($updateDetails.Count -gt 0) { $updateDetails -join " | " } else { "N/A" } 
             }
         }
@@ -30,27 +29,25 @@ function controlCheckingUpdateSystem{
                 OS                  = "Windows"
                 IsUpToDate          = $null
                 PendingUpdatesCount = -1
-                Message             = "Gagal memeriksa update: $($_.Exception.Message)"
+                Message             = "Failed to check for updates: $($_.Exception.Message)"
                 PendingDetails      = "N/A"
             }
         }
     }
 
-    # 2. LINUX
     elseif ($IsLinux) {
-        Write-Host "[Linux] Memeriksa Package Manager..." @Net
+        Write-Host "[Linux] Checking Package Manager..." @Net
         $pendingCount = 0
         $pkgManager = "Unknown"
         $updateDetails = @()
 
         if (Get-Command apt-get -ErrorAction SilentlyContinue) {
             $pkgManager = "apt"
-            # apt list --upgradable menampilkan daftar paket yang bisa diupdate
+            
             $output = apt list --upgradable 2>/dev/null | Select-String -Pattern "/"
             if ($output) {
                 $pendingCount = $output.Count
                 foreach ($line in $output) {
-                    # Format apt list biasanya: nama-paket/distro versi [upgradable...]
                     $pkgName = ($line.ToString() -split "/")[0]
                     $updateDetails += $pkgName
                 }
@@ -63,7 +60,6 @@ function controlCheckingUpdateSystem{
                 $updates = (dnf check-update --quiet 2>&1) | Where-Object { $_ -match '\S+' }
                 $pendingCount = $updates.Count
                 foreach ($line in $updates) {
-                    # Mengambil kata pertama (nama paket) dari baris dnf check-update
                     $pkgName = ($line.ToString() -split '\s+')[0]
                     $updateDetails += $pkgName
                 }
@@ -88,9 +84,8 @@ function controlCheckingUpdateSystem{
         }
     }
 
-    # 3. macOS
     elseif ($IsMacOS) {
-        Write-Host "[macOS] Memeriksa Software Update CLI..." @Net
+        Write-Host "[macOS] Checking CLI Software Updates..." @Net
         $output = softwareupdate -l 2>&1 | Out-String
         $updateDetails = @()
 
@@ -112,16 +107,15 @@ function controlCheckingUpdateSystem{
                     $updateDetails += $match.Groups[1].Value.Trim()
                 }
             } else {
-                # Fallback jika Regex gagal tapi output tidak mengatakan "No new software"
                 $pendingCount = 1
-                $updateDetails += "Update terdeteksi, format label tidak dikenali."
+                $updateDetails += "Update detected, label format not recognized."
             }
 
             return [PSCustomObject]@{
                 OS                  = "macOS"
                 IsUpToDate          = $false
                 PendingUpdatesCount = $pendingCount
-                Message             = "Ada $pendingCount update tertunda."
+                Message             = "$pendingCount pending update"
                 PendingDetails      = if ($updateDetails.Count -gt 0) { $updateDetails -join " | " } else { "N/A" }
             }
         }
