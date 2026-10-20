@@ -36,38 +36,25 @@ function controlStoragePerformanceTesting{
         $osName = "Linux"
         Write-Host "[Linux] Testing LUKS & Performance Storage status..." @Net
         $fdeType = "LUKS"
-        if (Get-Command lsblk -ErrorAction SilentlyContinue) {
-            $lsblkOutput = lsblk -f 2>&1 | Out-String
-            if ($lsblkOutput -match "crypto_LUKS") {
-                $isEncrypted = $true
-                $fdeMessage = "LUKS encrypted partition detected."
-            } else {
-                $isEncrypted = $false
-                $fdeMessage = "LUKS not detected."
-            }
+        $lsblkOutput = lsblk -f 2>&1 | Out-String
+        if ($lsblkOutput -match "crypto_LUKS") {
+            $isEncrypted = $true
         } else {
-            $isEncrypted = "Unknown"
+            $crypttab = if (Test-Path "/etc/crypttab") { Get-Content "/etc/crypttab" -ErrorAction SilentlyContinue | Out-String } else { "" }
+            if ($crypttab -match "\S+\s+\S+") { $isEncrypted = $true } else { $isEncrypted = $false }
         }
     }
     elseif ($IsMacOS) {
         $osName = "macOS"
         Write-Host "[macOS] Testing FileVault & Storage Performance status..." @Net
         $fdeType = "FileVault"
-        if (Get-Command fdesetup -ErrorAction SilentlyContinue) {
-            $fdeStatus = fdesetup status 2>&1 | Out-String
-            if ($fdeStatus -match "FileVault is On") {
-                $isEncrypted = $true
-                $fdeMessage = "FileVault is active."
-            } elseif ($fdeStatus -match "FileVault is Off") {
-                $isEncrypted = $false
-                $fdeMessage = "FileVault is NOT active."
-            } else {
-                $isEncrypted = "Unknown"
-                $fdeMessage = "FileVault status unknown."
-            }
+        if (Test-Path "/usr/bin/fdesetup") {
+            $fdeStatus = /usr/bin/fdesetup status 2>&1 | Out-String
+            if ($fdeStatus -match "FileVault is On") { $isEncrypted = $true } 
+            elseif ($fdeStatus -match "FileVault is Off") { $isEncrypted = $false } 
+            else { $isEncrypted = "Unknown" }
         } else {
             $isEncrypted = "Unknown"
-            $fdeMessage = "Utility 'fdesetup' not found."
         }
     }
 
@@ -78,9 +65,10 @@ function controlStoragePerformanceTesting{
     $perfStatus = "WARNING"
     $storageTested = "Unknown"
     $forensicStatus = "Unknown"
+    $fs = $null
     
     try {
-        $testFileSizeMB = 50
+        $testFileSizeMB = 100
         $bufferSize = $testFileSizeMB * 1048576
         $tempDir = [System.IO.Path]::GetTempPath()
         $testFile = Join-Path $tempDir "rasamala_storage_test_$([guid]::NewGuid()).tmp"
@@ -130,25 +118,25 @@ function controlStoragePerformanceTesting{
 
         $fs.Close()
 
-        if ($readSpeed -gt 7000) { 
+        if ($readSpeed -gt 5000) { 
             $storageTested = "NVMe EXTREME"
-            $forensicStatus = "Uncarvable (TRIM Active)"
+            $forensicStatus = "Inferred SSD (Uncarvable/TRIM)"
         }
-        elseif ($readSpeed -gt 3500) { 
+        elseif ($readSpeed -gt 2500) { 
             $storageTested = "NVMe HIGH-END"
-            $forensicStatus = "Uncarvable (TRIM Active)"
+            $forensicStatus = "Inferred SSD (Uncarvable/TRIM)"
         }
         elseif ($readSpeed -ge 600) { 
             $storageTested = "NVMe MID-RANGE"
-            $forensicStatus = "Uncarvable (TRIM Active)"
+            $forensicStatus = "Inferred SSD (Uncarvable/TRIM)"
         }
-        elseif ($readSpeed -ge 200) { 
+        elseif ($readSpeed -ge 150) { 
             $storageTested = "SATA SSD / ENTRY"
-            $forensicStatus = "Uncarvable (TRIM Active)"
+            $forensicStatus = "Inferred SSD (Uncarvable/TRIM)"
         }
         else { 
-            $storageTested = "HDD / SLOW"
-            $forensicStatus = "Carvable (TRIM Disabled / HDD)"
+            $storageTested = "HDD / VIRTUALIZED"
+            $forensicStatus = "Inferred HDD (Carvable)"
         }
 
         if ($writeSpeed -ge 50 -and $readSpeed -ge 50) { $perfStatus = "OK" }
@@ -158,6 +146,9 @@ function controlStoragePerformanceTesting{
         $storageTested = "Failed to test"
     }
     finally {
+        if ($null -ne $fs) {
+            $fs.Dispose()
+        }
         if (Test-Path $testFile -ErrorAction SilentlyContinue) {
             Remove-Item $testFile -Force -ErrorAction SilentlyContinue
         }

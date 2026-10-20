@@ -44,11 +44,11 @@ function controlCheckingUpdateSystem{
         if (Get-Command apt-get -ErrorAction SilentlyContinue) {
             $pkgManager = "apt"
             
-            $output = apt list --upgradable 2>/dev/null | Select-String -Pattern "/"
-            if ($output) {
+            $output = @(& apt-get -s upgrade 2>&1 | Select-String -Pattern "^Inst ")
+            if ($output.Count -gt 0) {
                 $pendingCount = $output.Count
                 foreach ($line in $output) {
-                    $pkgName = ($line.ToString() -split "/")[0]
+                    $pkgName = ($line.ToString() -split '\s+')[1]
                     $updateDetails += $pkgName
                 }
             }
@@ -57,7 +57,7 @@ function controlCheckingUpdateSystem{
             $pkgManager = "dnf"
             $null = dnf check-update 2>&1
             if ($LASTEXITCODE -eq 100) {
-                $updates = (dnf check-update --quiet 2>&1) | Where-Object { $_ -match '\S+' }
+                $updates = @((dnf check-update --quiet 2>&1) | Where-Object { $_ -match '\S+' })
                 $pendingCount = $updates.Count
                 foreach ($line in $updates) {
                     $pkgName = ($line.ToString() -split '\s+')[0]
@@ -89,7 +89,7 @@ function controlCheckingUpdateSystem{
         $output = softwareupdate -l 2>&1 | Out-String
         $updateDetails = @()
 
-        if ($output -match "No new software available") {
+        if ($output -match "No new software available" -or $output -match "No updates available") {
             return [PSCustomObject]@{
                 OS                  = "macOS"
                 IsUpToDate          = $true
@@ -99,24 +99,20 @@ function controlCheckingUpdateSystem{
             }
         }
         else {
-            $matches = [regex]::Matches($output, "\*\s+Label:\s*(.*)")
-            $pendingCount = $matches.Count
-            
-            if ($pendingCount -gt 0) {
-                foreach ($match in $matches) {
-                    $updateDetails += $match.Groups[1].Value.Trim()
-                }
-            } else {
-                $pendingCount = 1
-                $updateDetails += "Update detected, label format not recognized."
+            $lines = $output -split "`n" | Where-Object { $_ -match "\*\s+" -or $_ -match "Label:\s*" }
+            foreach ($line in $lines) {
+                $cleanLine = ($line -replace "\*|Label:", "").Trim()
+                if ($cleanLine) { $updateDetails += $cleanLine }
             }
+
+            $pendingCount = if ($updateDetails.Count -gt 0) { $updateDetails.Count } else { 1 }
 
             return [PSCustomObject]@{
                 OS                  = "macOS"
                 IsUpToDate          = $false
                 PendingUpdatesCount = $pendingCount
                 Message             = "$pendingCount pending update"
-                PendingDetails      = if ($updateDetails.Count -gt 0) { $updateDetails -join " | " } else { "N/A" }
+                PendingDetails      = if ($updateDetails.Count -gt 0) { ($updateDetails | Select-Object -Unique) -join " | " } else { "Update detected, label format not recognized." }
             }
         }
     }

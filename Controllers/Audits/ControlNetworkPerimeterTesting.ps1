@@ -150,7 +150,13 @@ function controlNetworkPerimeterTesting{
         $fwStatus = $false 
         $fwMessage = "Firewall service not detected."
 
-        if (Get-Command ufw -ErrorAction SilentlyContinue) { $fwStatus = $true; $fwType = "UFW"; $fwMessage = "UFW Active." }
+        if (Get-Command ufw -ErrorAction SilentlyContinue) { 
+            $ufwState = ufw status 2>&1 | Out-String
+            if ($ufwState -match "active") { $fwStatus =$true; $fwType = "UFW"; $fwMessage = "UFW Active." }
+        } elseif (Get-Command firewall-cmd -ErrorAction SilentlyContinue) {
+            $fwdState = firewall-cmd --state 2>&1 | Out-String
+            if ($fwdState -match "running") { $fwStatus =$true; $fwType = "Firewalld"; $fwMessage = "Firewalld Active." }
+        }
 
         $defaultRoute = ip -4 route show default 2>/dev/null | Select-Object -First 1
         if ($defaultRoute -match 'default via (\S+)') { 
@@ -165,7 +171,18 @@ function controlNetworkPerimeterTesting{
         $osName = "macOS"
         Write-Host "[macOS] Testing the Application Layer Firewall..." @Net
         $fwStatus = $false; $fwMessage = "ALF is not detected."
-        # ... (Logika macOS tetap sama seperti sebelumnya) ...
+        
+        if (Test-Path "/usr/libexec/ApplicationFirewall/socketfilterfw") {
+            $alfState = /usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate 2>&1 | Out-String
+            if ($alfState -match "enabled") { $fwStatus = $true; $fwMessage = "macOS ALF Active." }
+            else { $fwStatus = $false; $fwMessage = "macOS ALF Disabled." }
+        }
+
+        $defaultRoute = route -n get default 2>/dev/null | Out-String
+        if ($defaultRoute -match 'gateway:\s*(\S+)') {
+            $gwIP = $matches[1]
+            $roamingMessage = "Active Connection ($gwIP)"
+        }
     }
 
     if ($gwIP) {
@@ -192,8 +209,19 @@ function controlNetworkPerimeterTesting{
         try {
             if ($IsWindows) {$dnsTest = Resolve-DnsName -Name "one.one.one.one" -Server "1.1.1.1" -TcpOnly -ErrorAction SilentlyContinue
                 if ($dnsTest) { $dnsTag = "CLEAN (Public Resolver Valid)" } else { $dnsTag = "SUSPICIOUS (Possible Corporate DNS Intercepted)" }
-            } elseif ($IsLinux -or $IsMacOS) {$dnsTest = dig '@1.1.1.1' one.one.one.one +tcp +short 2>/dev/null
-                if ($dnsTest -match "\d+\.\d+\.\d+\.\d+") { $dnsTag = "CLEAN (Public Resolver Valid)" } else { $dnsTag = "SUSPICIOUS (DNS Intercepted)" }
+            } else {
+                if (Get-Command dig -ErrorAction SilentlyContinue) {
+                    $dnsTest = dig '@1.1.1.1' one.one.one.one +tcp +short 2>/dev/null
+                    if ($dnsTest -match "\d+\.\d+\.\d+\.\d+") { $dnsTag = "CLEAN (Public Resolver Valid)" } else { $dnsTag = "SUSPICIOUS (DNS Intercepted)" }
+                } else {
+                    $dnsSocket = New-Object System.Net.Sockets.TcpClient
+                    $asyncDns =$dnsSocket.BeginConnect("1.1.1.1", 53, $null,$null)
+                    if ($asyncDns.AsyncWaitHandle.WaitOne(1000,$false) -and $dnsSocket.Connected) {$dnsTag = "CLEAN (Port 53 Direct Reachable)"
+                        $dnsSocket.Close()
+                    } else {
+                        $dnsTag = "SUSPICIOUS (DNS Intercepted / Port 53 Blocked)"
+                    }
+                }
             }
         } catch {
             $dnsTag = "SUSPICIOUS (DNS Intercepted)"
@@ -208,11 +236,19 @@ function controlNetworkPerimeterTesting{
                     if ($ping1420 -match "Reply from|Balasan dari") { $mtuTag = "1420 Bytes (MTU Bottleneck)" }
                     else { $mtuTag = "< 1420 Bytes (Fragmented / ICMP Blocked)" }
                 }
-            } elseif ($IsLinux -or $IsMacOS) {
-                $ping1500 = ping -c 1 -M do -s 1472 -W 1$gwIP 2>&1 | Out-String
+            } elseif ($IsLinux) {
+                $ping1500 = ping -c 1 -M do -s 1472 -W 1 $gwIP 2>&1 | Out-String
                 if ($ping1500 -match "bytes from") { $mtuTag = "1500 Bytes" }
                 else {
                     $ping1420 = ping -c 1 -M do -s 1392 -W 1 $gwIP 2>&1 | Out-String
+                    if ($ping1420 -match "bytes from") { $mtuTag = "1420 Bytes (MTU Bottleneck)" }
+                    else { $mtuTag = "< 1420 Bytes (Fragmented / ICMP Blocked)" }
+                }
+            } elseif ($IsMacOS) {
+                $ping1500 = ping -c 1 -D -s 1472 -W 1000 $gwIP 2>&1 | Out-String
+                if ($ping1500 -match "bytes from") { $mtuTag = "1500 Bytes" }
+                else {
+                    $ping1420 = ping -c 1 -D -s 1392 -W 1000 $gwIP 2>&1 | Out-String
                     if ($ping1420 -match "bytes from") { $mtuTag = "1420 Bytes (MTU Bottleneck)" }
                     else { $mtuTag = "< 1420 Bytes (Fragmented / ICMP Blocked)" }
                 }
@@ -274,6 +310,7 @@ function controlNetworkPerimeterTesting{
         Egress_Filtering  = $egressTag
         DNS_Tampering     = $dnsTag
         Path_MTU          = $mtuTag
-        Perimeter_Tested  = "$fwMessage | $roamingMessage"
+        Firewall_Details  = $fwMessage
+        Roaming_Details   = $roamingMessage
     }
 }
