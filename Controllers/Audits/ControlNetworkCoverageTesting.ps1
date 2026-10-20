@@ -1,14 +1,10 @@
 function controlNetworkCoverageTesting{
-    # Inisialisasi variabel penampung
     $inboundPorts = @()
     $outboundConns = @()
     $osPlatform = if ($IsWindows) { "Windows" } elseif ($IsLinux) { "Linux" } else { "macOS" }
     
-    Write-Host "`n[$osPlatform] Memeriksa Kualitas Sinyal, Coverage & Outbound Sockets..." @Net
+    Write-Host "`n[$osPlatform] Testing Signal Quality, Coverage & Outbound Sockets..." @Net
 
-    # ==========================================
-    # [BARU] 0. NETWORK COVERAGE & LATENCY AUDIT
-    # ==========================================
     $coverageStatus = "CRITICAL"
     $interfaceType  = "Unknown"
     $signalOrSpeed  = "Unknown"
@@ -18,7 +14,6 @@ function controlNetworkCoverageTesting{
 
     if ($IsWindows) {
         try {
-            # Cari Default Gateway dan Adapter Jaringan aktif
             $routes = Get-NetRoute -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue | Sort-Object RouteMetric
             $route = $null
             $adapter = $null
@@ -40,17 +35,14 @@ function controlNetworkCoverageTesting{
             if ($route) {
                 $gateway = $route.NextHop
 
-                # Tentukan jenis antarmuka
                 $interfaceType = "Ethernet"
                 $isWiFi = ($adapter.PhysicalMediaType -eq 802.11 -or $adapter.Name -match "Wi-Fi|Wireless")
                 if ($isWiFi) { $interfaceType = "Wi-Fi" }
 
-                # Ukur Sinyal (Wi-Fi) atau Kecepatan (Ethernet / VPN)
                 $rssi = -100
                 if ($isWiFi) {
                     $netsh = netsh wlan show interfaces
                     
-                    # [PERBAIKAN]: Tangkap pesan penolakan akses dari Windows
                     if ($netsh -match "error 5|requires elevation|location permission") {
                         if ($adapter -and $adapter.Speed) {
                             try {
@@ -81,7 +73,6 @@ function controlNetworkCoverageTesting{
                         }
                     }
                 } else {
-                    # Logika Ethernet
                     if ($adapter -and $adapter.Speed) {
                         try {
                             $speedMbps = [math]::Round([uint64]$adapter.Speed / 1000000)
@@ -98,7 +89,6 @@ function controlNetworkCoverageTesting{
                     }
                 }
 
-                # Pengujian Latensi Aktif (Ping Burst ke Gateway)
                 $ping = Test-Connection -TargetName $gateway -Count 3 -ErrorAction SilentlyContinue
                 if ($ping) {
                     $validPings = $ping | Where-Object { $_.ResponseTime -ne $null -or $_.Latency -ne $null }
@@ -113,18 +103,15 @@ function controlNetworkCoverageTesting{
                     }
                 }
 
-                # Evaluasi TIER berdasarkan performa aktif
                 if ($isWiFi -and $signalOrSpeed -eq "Disconnected") {
                     $coverageTier   = "BASIC"
                     $coverageStatus = "CRITICAL"
                 } elseif ($isWiFi -and $rssi -gt -100) {
-                    # Evaluasi Wi-Fi Presisi dengan Sinyal dBm (Jika Run as Admin)
                     if ($rssi -ge -60 -and $latencyAvg -lt 15) { $coverageTier = "MISSION-CRITICAL"; $coverageStatus = "OK" }
                     elseif ($rssi -ge -72 -and $latencyAvg -lt 30) { $coverageTier = "MULTIMEDIA"; $coverageStatus = "OK" }
                     elseif ($rssi -ge -80 -and $latencyAvg -lt 80) { $coverageTier = "PRODUCTIVITY"; $coverageStatus = "WARNING" }
                     else { $coverageTier = "BASIC"; $coverageStatus = "CRITICAL" }
                 } else {
-                    # Fallback untuk Ethernet atau Wi-Fi Non-Admin (Berbasis Latensi & Speed)
                     if ($latencyAvg -lt 10) { $coverageTier = "MISSION-CRITICAL"; $coverageStatus = "OK" }
                     elseif ($latencyAvg -lt 25) { $coverageTier = "MULTIMEDIA"; $coverageStatus = "OK" }
                     elseif ($latencyAvg -lt 50) { $coverageTier = "PRODUCTIVITY"; $coverageStatus = "WARNING" }
@@ -132,23 +119,20 @@ function controlNetworkCoverageTesting{
                 }
             }
         } catch {
-            Write-Warning "Gagal memeriksa Network Coverage: $($_.Exception.Message)"
+            Write-Warning "Failed to test Network Coverage: $($_.Exception.Message)"
         }
     }
 
     elseif ($IsLinux) {
         try {
-            # Ambil Default Gateway dari tabel routing kernel Linux
             $defaultRoute = ip -4 route show default 2>/dev/null | Select-Object -First 1
             if ($defaultRoute -match 'default via (\S+) dev (\S+)') {
                 $gateway =$matches[1]
                 $iface =$matches[2]
                 
-                # Interface Wi-Fi di Linux biasanya berawalan 'wl' (wlan0, wlp2s0)
                 $isWiFi = ($iface -match '^wl')
                 $interfaceType = if ($isWiFi) { "Wi-Fi" } else { "Ethernet" }
                 
-                # Baca Sinyal/Kecepatan
                 if ($isWiFi) {
                     $iwOutput = iwconfig$iface 2>/dev/null | Select-String "Signal level=(-\d+)\s+dBm"
                     if ($iwOutput -and $iwOutput.Matches.Groups[1].Value) {
@@ -172,7 +156,6 @@ function controlNetworkCoverageTesting{
                     }
                 }
 
-                # Pengujian Latensi Aktif (Ping ke Gateway)
                 $ping = Test-Connection -TargetName$gateway -Count 3 -ErrorAction SilentlyContinue
                 if ($ping) {
                     $validPings =$ping | Where-Object { $_.ResponseTime -ne$null -or $_.Latency -ne$null }
@@ -187,7 +170,6 @@ function controlNetworkCoverageTesting{
                     }
                 }
 
-                # Evaluasi TIER
                 if ($latencyAvg -lt 15) { $coverageTier = "MISSION-CRITICAL"; $coverageStatus = "OK" }
                 elseif ($latencyAvg -lt 30) { $coverageTier = "MULTIMEDIA"; $coverageStatus = "OK" }
                 elseif ($latencyAvg -lt 80) { $coverageTier = "PRODUCTIVITY"; $coverageStatus = "WARNING" }
@@ -198,20 +180,15 @@ function controlNetworkCoverageTesting{
                 $signalOrSpeed  = "Disconnected / No Route"
             }
         } catch {
-            Write-Warning "Gagal membaca Network Coverage Linux: $($_.Exception.Message)"
+            Write-Warning "Failed to read Network Coverage Linux: $($_.Exception.Message)"
         }
     }
 
-    # ==========================================
-    # 1. WINDOWS: Menggunakan Get-NetTCPConnection
-    # ==========================================
     if ($IsWindows) {
         try {
-            # --- A. Inbound / Listening Ports ---
             $listenConns = Get-NetTCPConnection -State Listen -ErrorAction Stop
             $inboundPorts = $listenConns.LocalPort | Select-Object -Unique | Sort-Object
 
-            # --- B. Outbound / Established Connections ---
             $tcpConns = Get-NetTCPConnection -State Established -ErrorAction SilentlyContinue
             foreach ($conn in $tcpConns) {
                 if ($conn.RemoteAddress -notmatch '^127\.' -and $conn.RemoteAddress -ne '::1') {
@@ -235,12 +212,8 @@ function controlNetworkCoverageTesting{
         }
     }
 
-    # ==========================================
-    # 2. LINUX: Menggunakan utilitas 'ss'
-    # ==========================================
     elseif ($IsLinux) {
         if (Get-Command ss -ErrorAction SilentlyContinue) {
-            # --- A. Inbound / Listening Ports ---
             $linesListen = ss -tln 2>/dev/null | Select-String "LISTEN"
             foreach ($line in $linesListen) {
                 if ($line -match ":(\d+)\s+") {
@@ -248,7 +221,6 @@ function controlNetworkCoverageTesting{
                 }
             }
 
-            # --- B. Outbound / Established Connections ---
             $ssOutput = ss -ntp state established 2>/dev/null
             foreach ($line in $ssOutput) {
                 if ($line -match 'ESTAB\s+\d+\s+\d+\s+(\S+)\s+(\S+)') {
@@ -275,16 +247,12 @@ function controlNetworkCoverageTesting{
                 }
             }
         } else {
-            Write-Warning "Utilitas 'ss' tidak ditemukan di sistem Linux ini."
+            Write-Warning "The 'ss' utility is not found on this Linux system."
         }
     }
 
-    # ==========================================
-    # 3. MACOS: Menggunakan utilitas 'lsof'
-    # ==========================================
     elseif ($IsMacOS) {     
         if (Get-Command lsof -ErrorAction SilentlyContinue) {
-            # --- A. Inbound / Listening Ports ---
             $linesListen = lsof -iTCP -sTCP:LISTEN -P -n 2>/dev/null
             foreach ($line in $linesListen) {
                 if ($line -match ":(\d+)\s+\(LISTEN") {
@@ -292,7 +260,6 @@ function controlNetworkCoverageTesting{
                 }
             }
 
-            # --- B. Outbound / Established Connections ---
             $lsofOutput = lsof -iTCP -sTCP:ESTABLISHED -n -P 2>/dev/null
             foreach ($line in $lsofOutput) {
                 if ($line -match '^(\S+)\s+(\d+).*?TCP\s+(\S+)->(\S+)\s+\(ESTABLISHED\)') {
@@ -313,22 +280,17 @@ function controlNetworkCoverageTesting{
                 }
             }
         } else {
-            Write-Warning "Utilitas 'lsof' tidak ditemukan di sistem macOS ini."
+            Write-Warning "The 'lsof' utility is not found in this macOS system."
         }
     }
 
-    # ==========================================
-    # 4. KONSOLIDASI & FORMAT OUTPUT
-    # ==========================================
     $inboundPorts = $inboundPorts | Select-Object -Unique | Sort-Object | Where-Object {$_ -ne $null }
     $portList = if ($inboundPorts) {$inboundPorts -join ", " } else { "None" }
 
-    # Status Keseluruhan mempertimbangkan Coverage dan Sockets
     $auditStatus = "PASS"
     if ($outboundConns.Count -gt 50 -or $inboundPorts.Count -gt 15) {$auditStatus = "WARNING" }
     if ($coverageStatus -eq "POOR" -or $coverageStatus -eq "CRITICAL") { $auditStatus = "WARNING" }
 
-    # Eksekusi proses pengumpulan data untuk Outbound Sockets
     $aggregatedResults = foreach ($group in $outboundConns | Group-Object ProcessName) {
         $procName =$group.Name
         $allPids = ($group.Group.PID | Select-Object -Unique) -join ', '
@@ -367,10 +329,9 @@ function controlNetworkCoverageTesting{
             else { $publisher = "System Service (Admin Only)" }
         }
         
-        "`n  - $procName (PID: $allPids) | $statusTag : $socketCount Sockets"
+        "`n- $procName (PID: $allPids) | $statusTag : $socketCount Sockets"
     }
 
-    # [DIKEMBALIKAN KE STRUKTUR ASLI] agar tidak merusak format -auditendpoint
     $networkAuditResult = [PSCustomObject]@{
         OSPlatform               = $osPlatform
         Status                   = $auditStatus
@@ -387,7 +348,6 @@ function controlNetworkCoverageTesting{
 
     $networkAuditResult | Add-Member -NotePropertyName "AggregatedSockets" -NotePropertyValue $aggregatedResults
 
-    # Cetak ke layar dengan format Key-Value (Opsi 2) tanpa memengaruhi objek aslinya
     $networkAuditResult | Select-Object `
         @{Name="OS"; Expression={$_.OSPlatform}},
         Status,
