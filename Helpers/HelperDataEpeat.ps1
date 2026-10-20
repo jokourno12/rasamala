@@ -1,5 +1,5 @@
 function etl{
-    Write-Host "[*] Memulai proses ETL: Excel ke LiteDB..."
+    Write-Host "[*] Starts the ETL: Excel to LiteDB process..."
     
     $databasePath = "$PSScriptRoot\..\Database"
     $libPath = "$PSScriptRoot\Lib"
@@ -7,19 +7,16 @@ function etl{
     $dbFile = "$databasePath\sustainability.db"
     $liteDbDll = "$libPath\LiteDB.dll" 
 
-    # --- 1. VALIDASI & INSTALASI MODUL ImportExcel ---
     if (-not (Get-Module -ListAvailable -Name ImportExcel)) {
-        Write-Host "[-] Modul ImportExcel tidak ditemukan. Memulai instalasi..." -ForegroundColor Yellow
+        Write-Host "[-] ImportExcel module not found. Starting installation..." -ForegroundColor Yellow
         Set-PSRepository -Name 'PSGallery' -InstallationPolicy Trusted -ErrorAction SilentlyContinue
         Install-Module -Name ImportExcel -Scope CurrentUser -Force -AllowClobber
-        Write-Host "[+] Modul ImportExcel berhasil diinstal." -ForegroundColor Green
+        Write-Host "[+] The ImportExcel module was installed successfully." -ForegroundColor Green
     }
     
-    # --- 2. VALIDASI & UNDUH OTOMATIS LiteDB.dll ---
     if (-not (Test-Path $liteDbDll)) {
-        Write-Host "[-] Pustaka LiteDB.dll tidak ditemukan. Menyiapkan environment..." -ForegroundColor Yellow
+        Write-Host "[-] LiteDB.dll library not found. Prepare environment..." -ForegroundColor Yellow
         
-        # Buat folder Lib jika belum ada
         if (-not (Test-Path $libPath)) {
             New-Item -Path $libPath -ItemType Directory -Force | Out-Null
         }
@@ -27,44 +24,36 @@ function etl{
         $zipPath = "$libPath\litedb.zip"
         $extractPath = "$libPath\litedb_extracted"
 
-        # Unduh dari repositori NuGet resmi
-        Write-Host "    -> Mengunduh package LiteDB..."
+        Write-Host "    -> Downloading the LiteDB package..."
         Invoke-WebRequest -Uri "https://www.nuget.org/api/v2/package/LiteDB/5.0.17" -OutFile $zipPath
 
-        # Ekstrak file dan ambil versi netstandard2.0 (Paling cocok untuk PowerShell 7 / Cross-Platform)
-        Write-Host "    -> Mengekstrak dan menyalin DLL..."
+        Write-Host "    -> Extracting and copying DLL..."
         Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
         Copy-Item -Path "$extractPath\lib\netstandard2.0\LiteDB.dll" -Destination $liteDbDll -Force
 
-        # Bersihkan file sementara
         Remove-Item -Path $zipPath -Force
         Remove-Item -Path $extractPath -Recurse -Force
 
-        Write-Host "[+] Pustaka LiteDB.dll berhasil disiapkan." -ForegroundColor Green
+        Write-Host "[+] The LiteDB.dll library was successfully set up." -ForegroundColor Green
     }
 
-    # --- 3. BACA DATA EXCEL ---
-    Write-Host "[*] Membaca data dari $excelFile..."
-    # Mengecek apakah file Excel benar-benar ada sebelum dibaca
+    Write-Host "[*] Read data from $excelFile..."
     if (-not (Test-Path $excelFile)) {
-        Write-Host "[X] File Excel tidak ditemukan: $excelFile" -ForegroundColor Red
+        Write-Host "[X] Excel file not found: $excelFile" -ForegroundColor Red
         return
     }
     $excelData = Import-Excel -Path $excelFile
 
-    # --- 4. MUAT LITEDB & KONEKSI ---
     Add-Type -Path $liteDbDll
     $db = New-Object LiteDB.LiteDatabase("Filename=$dbFile;Connection=shared")
     $collection = $db.GetCollection("epeat_products")
     
-    $collection.DeleteAll() | Out-Null # Kosongkan data lama
+    $collection.DeleteAll() | Out-Null
 
-    # --- 5. PROSES PEMETAAN & PENYISIPAN DATA ---
-    Write-Host "[*] Menyisipkan data ke database sustainability.db..."
+    Write-Host "[*] Insert data into the database sustainability.db..."
     foreach ($row in $excelData) {
         $doc = New-Object LiteDB.BsonDocument
         
-        # Sesuaikan ini dengan nama kolom di Excel Anda
         $doc["product_name"] = [LiteDB.BsonValue]::new([string]$row.'Product Name')
     $doc["manufacturer"] = [LiteDB.BsonValue]::new([string]$row.Manufacturer)
     $doc["tier"]         = [LiteDB.BsonValue]::new([string]$row.'EPEAT Tier')
@@ -76,10 +65,10 @@ function etl{
 
     if (Test-Path $excelFile) {
         Remove-Item -Path $excelFile -Force
-        Write-Host "[+] File Excel sementara ($excelFile) berhasil dihapus." -ForegroundColor Gray
+        Write-Host "[+] The temporary Excel file ($excelFile) was successfully deleted." -ForegroundColor Gray
     }
 
-    Write-Host "[+] Proses ETL selesai. Database EPEAT 1.0 sustainability.db siap digunakan!" -ForegroundColor Green
+    Write-Host "[+] ETL process completed. The EPEAT 1.0 sustainability.db database is ready to use!" -ForegroundColor Green
 }
 
 function helperDataEpeat{
@@ -88,11 +77,9 @@ function helperDataEpeat{
                     Sort-Object LastWriteTime -Descending | 
                     Select-Object -First 1
 
-    # Jalankan hanya jika database belum ada atau umurnya sudah >= 3 hari
     if ((-not $existingFile) -or (($today - $existingFile.LastWriteTime).Days -ge 3)){
         $totalHits = 0
 
-        # 1. Pancing error untuk menangkap ActualHits secara dinamis
         try {
             Invoke-RestMethod -Uri "https://www.epeat.net/api/report/generate" -Method POST -ContentType "application/json" -Body '{"facets":{"status":["Active"]},"isAdvanced":false,"query":""}' -ErrorAction Stop
         } catch {
@@ -100,11 +87,9 @@ function helperDataEpeat{
             $totalHits =$errorJson.ActualHits
         }
 
-        # 2. Eksekusi unduhan jika nilai totalHits berhasil didapat
         if ($totalHits -gt 0) {
             Invoke-WebRequest -Uri "https://www.epeat.net/product-finder?menu[status]=Active" -SessionVariable session -UseBasicParsing | Out-Null
 
-            # Gabungkan $totalHits ke string agar terbaca sebagai angka asli
             $payload = '{"facets":{"status":["Active"]},"totalNumberOfResult":' + $totalHits + ',"isAdvanced":false,"query":""}'
 
             Invoke-WebRequest -Uri "https://www.epeat.net/api/report/generate" `
