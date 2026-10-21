@@ -3,7 +3,7 @@ function controlAuditEndpoint{
 
     $auditResults = [ordered]@{
         Timestamp          = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
-        HostName           = $env:COMPUTERNAME
+        HostName           = [Environment]::MachineName
         ProcessorStress    = routeProcessorStressTesting -ReturnData 6>$null
         SystemUpdate       = routeCheckingUpdateSystem -ReturnData 6>$null
         StoragePerformance = routeStoragePerformanceTesting -ReturnData 6>$null
