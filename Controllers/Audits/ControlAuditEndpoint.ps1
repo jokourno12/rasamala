@@ -34,13 +34,13 @@ function controlAuditEndpoint{
     $summaryData += [PSCustomObject]@{
         Modul     = "Storage Performance"
         Status    = $s.Status
-        Ringkasan = "{0} (Read {1} MB/s)" -f $s.Storage_Tested, $s.Seq_Read_MBps
+        Ringkasan = "{0} (Read {1} MB/s)" -f $s.StorageTested, $s.SeqReadMBps
     }
 
     $np = $auditResults.NetworkPerimeter
-    $fwStr = if ($np.Firewall_Active) { "Active Firewall" } else { "Firewall Off" }
+    $fwStr = if ($np.FirewallActive) { "Active Firewall" } else { "Firewall Off" }
     
-    $dnsTrimmed = if ($np.DNS_Tampering) { $np.DNS_Tampering.Split('(')[0].Trim() } else { "N/A" }
+    $dnsTrimmed = if ($np.DNSTampering) { $np.DNSTampering.Split('(')[0].Trim() } else { "N/A" }
     
     $summaryData += [PSCustomObject]@{
         Modul     = "Network Perimeter"

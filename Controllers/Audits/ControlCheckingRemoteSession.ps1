@@ -1,13 +1,17 @@
 function controlCheckingRemoteSession{
-    Write-Host "`n[Windows] Checking Remote Session & Sustainability Status..." @Net
+    $osPlatform = if ($IsWindows) { "Windows" } elseif ($IsLinux) { "Linux" } else { "macOS" }
+    Write-Host "`n[$osPlatform] Checking Remote Session & Sustainability Status..." @Net
     
-    $databasePath = "$PSScriptRoot\..\..\Database"
-    $libPath = "$PSScriptRoot\..\..\Helpers\Lib"
-    $dbFile = "$databasePath\sustainability.db"
-    $liteDbDll = "$libPath\LiteDB.dll"
+    $databasePath = "$PSScriptRoot/../../Database"
+    $libPath = "$PSScriptRoot/../../Helpers/Lib"
+    
+    $dbFile = Join-Path -Path $databasePath -ChildPath "sustainability.db"
+    $liteDbDll = Join-Path -Path $libPath -ChildPath "LiteDB.dll"
 
     $sessions = @()
-    $remoteSessionData = $null
+    $sysManufacturer = ""
+    $sysModel = ""
+    $hardwareModel = "Unknown"
 
     if ($IsWindows) {
         $quserOutput = quser.exe 2>$null
@@ -79,27 +83,25 @@ function controlCheckingRemoteSession{
     }
     
     elseif ($IsLinux -or $IsMacOS) {
-        $osName = if ($IsLinux) { "LINUX" } else { "MACOS" }
-        
         $whoOutput = who 2>$null
         
         if ($whoOutput) {
             foreach ($line in $whoOutput) {
                 if ($line -match "^(\S+)\s+(\S+)\s+(.*?)\s*(?:\((.*?)\))?$") {
-                    $username   = $matches[1]
-                    $tty        = $matches[2]
-                    $remoteHost = $matches[4]
+                    $username   =$matches[1]
+                    $tty        =$matches[2]
+                    $remoteHost =$matches[4]
                     
-                    if ($null -ne $remoteHost) {
-                        $remoteHost = $remoteHost.Trim()
+                    if ($null -ne$remoteHost) {
+                        $remoteHost =$remoteHost.Trim()
                     }
 
                     if ([string]::IsNullOrWhiteSpace($remoteHost) -or $remoteHost -match "^:\d" -or $remoteHost -match "wayland|tty") {
                         $isRemote = $false
                         $finalRemoteHost = "localhost"
                     } else {
-                        $isRemote = $true
-                        $finalRemoteHost = $remoteHost
+                        $isRemote =$true
+                        $finalRemoteHost =$remoteHost
                     }
                     
                     $sessions += [PSCustomObject]@{
@@ -113,44 +115,80 @@ function controlCheckingRemoteSession{
             }
         }
 
-        $hardwareModel = "N/A (Cek DMI/dmidecode)"
-        
-        $activeRemoteSessions = @($sessions | Where-Object { $_.IsRemote -eq $true })
-        $remoteSessionData = [PSCustomObject]@{
-            OSPlatform         = $osName
-            HardwareModel      = $hardwareModel
-            EpeatStatus        = "Unregistered" 
-            Status             = if ($activeRemoteSessions.Count -gt 0) { "FAIL" } else { "PASS" }
-            TotalSessions      = $sessions.Count
-            RemoteSessionCount = $activeRemoteSessions.Count
-            Details            = $sessions
-        }
-    }
-
-    if ($null -ne $remoteSessionData) {
-        
-        $formattedSessions = ""
-        
-        if ($remoteSessionData.Details.Count -gt 0) {$tempList = @()
-            foreach ($sessionItem in $remoteSessionData.Details) {$tempList += "`n- $($sessionItem.Username) | $($sessionItem.SessionType) | $($sessionItem.RemoteHost) | Remote $($sessionItem.IsRemote) | $($sessionItem.State)"
+        if ($IsLinux) {
+            # PERBAIKAN: Membaca DMI via sysfs tanpa butuh akses sudo/root
+            $sysVendorFile = "/sys/devices/virtual/dmi/id/sys_vendor"
+            $sysProductFile = "/sys/devices/virtual/dmi/id/product_name"
+            if (Test-Path $sysVendorFile) { $sysManufacturer = (Get-Content$sysVendorFile -ErrorAction SilentlyContinue).Trim() }
+            if (Test-Path $sysProductFile) { $sysModel = (Get-Content$sysProductFile -ErrorAction SilentlyContinue).Trim() }
+            
+            if ($sysManufacturer -or $sysModel) {$hardwareModel = "$sysManufacturer$sysModel".Trim()
+            } else {
+                $hardwareModel = "Generic Linux Device"
             }
-            $formattedSessions = $tempList -join ""
-        } else {
-            $formattedSessions = "`n- No active session detected."
+        } 
+        elseif ($IsMacOS) {
+            if (Get-Command sysctl -ErrorAction SilentlyContinue) {
+                $sysModel = (sysctl -n hw.model 2>/dev/null).Trim()
+            }
+            $sysManufacturer = "Apple"
+            if (-not $sysModel) {$sysModel = "Mac" }
+            $hardwareModel = "$sysManufacturer$sysModel".Trim()
         }
-
-        $displayObject = [PSCustomObject]@{
-            OS                   = $remoteSessionData.OSPlatform
-            Status               = $remoteSessionData.Status
-            HardwareModel        = $remoteSessionData.HardwareModel
-            EPEATStatus          = $remoteSessionData.EpeatStatus
-            TotalSessions        = $remoteSessionData.TotalSessions
-            RemoteSessionsRDP    = $remoteSessionData.RemoteSessionCount
-            ActiveSessionsDetail = $formattedSessions
-        }
-
-        $displayObject | Format-List | Out-String | Write-Host
-        
-        return $remoteSessionData
     }
+
+    $epeatStatus = "Unregistered"
+    if ($sysManufacturer -and$sysModel) {
+        if (Test-Path $dbFile) {
+            if (Test-Path $liteDbDll) {
+                try {
+                    Add-Type -Path $liteDbDll
+                    $db = New-Object LiteDB.LiteDatabase("Filename=$dbFile;Connection=shared")
+                    $collection =$db.GetCollection("epeat_products")
+                    
+                    $cleanManufacturer =$sysManufacturer -replace '(?i)\s*Inc\.?|\s*Corp\.?|\s*Ltd\.?', ''
+                    
+                    $matchedProduct =$collection.FindAll() | Where-Object {
+                        $_["manufacturer"].AsString -match $cleanManufacturer -and
+                        $_["product_name"].AsString -match [regex]::Escape($sysModel)
+                    } | Select-Object -First 1
+
+                    if ($matchedProduct) {
+                        $epeatStatus =$matchedProduct["tier"].AsString
+                    }
+                    $db.Dispose()
+                } catch {
+                    Write-Warning "Gagal membaca database EPEAT: $($_.Exception.Message)"
+                }
+            } else {
+                Write-Host "[-] LiteDB.dll tidak ditemukan. Skip EPEAT checking." -ForegroundColor Yellow
+            }
+        } else {
+            Write-Host "[-] sustainability.db tidak ditemukan. Skip EPEAT checking." -ForegroundColor Yellow
+        }
+    }
+
+    $activeRemoteSessions = @($sessions | Where-Object { $_.IsRemote -eq$true })
+    $status = if ($activeRemoteSessions.Count -gt 0) { "FAIL" } else { "PASS" }
+
+    $formattedSessions = ""
+    if ($sessions.Count -gt 0) {$tempList = @()
+        foreach ($s in $sessions) {$tempList += "`n- $($s.Username) | $($s.SessionType) | $($s.RemoteHost) | Remote $($s.IsRemote) | $($s.State)"
+        }
+        $formattedSessions = $tempList -join ""
+    } else {
+        $formattedSessions = "`n- No active session detected."
+    }
+
+    $remoteSessionData = [PSCustomObject]@{
+        OSPlatform           = $osPlatform
+        Status               = $status
+        HardwareModel        = $hardwareModel
+        EpeatStatus          = $epeatStatus 
+        TotalSessions        = $sessions.Count
+        RemoteSessionCount   = $activeRemoteSessions.Count
+        ActiveSessionsDetail = $formattedSessions
+    }
+    
+    return $remoteSessionData
 }

@@ -36,7 +36,7 @@ function controlNetworkCoverageTesting{
                 $gateway = $route.NextHop
 
                 $interfaceType = "Ethernet"
-                $isWiFi = ($adapter.PhysicalMediaType -eq 802.11 -or $adapter.Name -match "Wi-Fi|Wireless")
+                $isWiFi = (($adapter.PhysicalMediaType -match "802.11") -or ($adapter.Name -match "Wi-Fi|Wireless"))
                 if ($isWiFi) { $interfaceType = "Wi-Fi" }
 
                 $rssi = -100
@@ -134,7 +134,7 @@ function controlNetworkCoverageTesting{
                 $interfaceType = if ($isWiFi) { "Wi-Fi" } else { "Ethernet" }
                 
                 if ($isWiFi) {
-                    $iwOutput = iwconfig$iface 2>/dev/null | Select-String "Signal level=(-\d+)\s+dBm"
+                    $iwOutput = iwconfig $iface 2>/dev/null | Select-String "Signal level=(-\d+)\s+dBm"
                     if ($iwOutput -and $iwOutput.Matches.Groups[1].Value) {
                         $rssi = [int]$iwOutput.Matches.Groups[1].Value 
                         $sigLabel = if ($rssi -ge -60) { "Strong" } elseif ($rssi -ge -74) { "Moderate" } else { "Weak" }
@@ -145,7 +145,7 @@ function controlNetworkCoverageTesting{
                 } else {
                     $speedFile = "/sys/class/net/$iface/speed"
                     if (Test-Path $speedFile) {
-                        $speed = Get-Content$speedFile -ErrorAction SilentlyContinue
+                        $speed = Get-Content $speedFile -ErrorAction SilentlyContinue
                         if ($speed -and$speed -ne "-1") {
                             $signalOrSpeed = "$speed Mbps Link"
                         } else {
@@ -302,31 +302,39 @@ function controlNetworkCoverageTesting{
         
         $proc = Get-Process -Id $firstPid -ErrorAction SilentlyContinue
         
-        if ($proc -and$proc.Path) {
-            if ($IsWindows) {
-                $sig = Get-AuthenticodeSignature -FilePath 	$proc.Path -ErrorAction SilentlyContinue
-                if ($sig -and $sig.Status -eq 'Valid') {$statusTag = "[VALID]" }
-                else { $statusTag = "[UNSIGNED]"; $riskLevel = "HIGH" }
-                    
-                $company = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($proc.Path).CompanyName
-                if (-not [string]::IsNullOrWhiteSpace($company)) { $publisher =$company.Trim() }
-            } 
-            elseif ($IsLinux -or $IsMacOS) {
-                if ($proc.Path -match '^/(usr/)?(s)?bin/' -or $proc.Path -match '^/lib') {
-                    $statusTag = "[VALID]"; $publisher = "System / OS Core Binary"
-                } else {
-                    $statusTag = "[UNVERIFIED]"; $publisher = "User / Third-Party Binary"
-                }
-            }
+        try {
+            $hasPath = $false
+            if ($proc -and $proc.Path) { $hasPath = $true }
             
-            if ($proc.Path -match 'AppData\\Local\\Temp') {
-                $statusTag = "[!] SUSPICIOUS"; $riskLevel = "HIGH"
+            if ($hasPath) {
+                if ($IsWindows) {
+                    $sig = Get-AuthenticodeSignature -FilePath $proc.Path -ErrorAction SilentlyContinue
+                    if ($sig -and $sig.Status -eq 'Valid') { $statusTag = "[VALID]" }
+                    else { $statusTag = "[UNSIGNED]"; $riskLevel = "HIGH" }
+                        
+                    $company = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($proc.Path).CompanyName
+                    if (-not [string]::IsNullOrWhiteSpace($company)) { $publisher = $company.Trim() }
+                } 
+                elseif ($IsLinux -or $IsMacOS) {
+                    if ($proc.Path -match '^/(usr/)?(s)?bin/' -or $proc.Path -match '^/lib') {
+                        $statusTag = "[VALID]"; $publisher = "System / OS Core Binary"
+                    } else {
+                        $statusTag = "[UNVERIFIED]"; $publisher = "User / Third-Party Binary"
+                    }
+                }
+                
+                if ($proc.Path -match 'AppData\\Local\\Temp') {
+                    $statusTag = "[!] SUSPICIOUS"; $riskLevel = "HIGH"
+                }
+            } else {
+                $statusTag = "[PROTECTED]"
+                if ($firstPid -eq 4 -or $procName -match "System") { $publisher = "NT AUTHORITY / OS Core" }
+                elseif ($procName -match "svchost") { $publisher = "Windows Core Service" }
+                else { $publisher = "System Service (Admin Only)" }
             }
-        } else {
+        } catch {
             $statusTag = "[PROTECTED]"
-            if ($firstPid -eq 4 -or $procName -match "System") { $publisher = "NT AUTHORITY / OS Core" }
-            elseif ($procName -match "svchost") { $publisher = "Windows Core Service" }
-            else { $publisher = "System Service (Admin Only)" }
+            $publisher = "System Service (Admin Only)"
         }
         
         "`n- $procName (PID: $allPids) | $statusTag : $socketCount Sockets"
@@ -343,21 +351,8 @@ function controlNetworkCoverageTesting{
         ListeningPortsCount      = if ($inboundPorts) { $inboundPorts.Count } else { 0 }
         ListeningPorts           = $portList
         OutboundConnectionsCount = $outboundConns.Count
-        OutboundDetails          = @($outboundConns)
+        TopSocketProcesses       = ($aggregatedResults | Sort-Object) -join ''
     }
-
-    $networkAuditResult | Add-Member -NotePropertyName "AggregatedSockets" -NotePropertyValue $aggregatedResults
-
-    $networkAuditResult | Select-Object `
-        @{Name="OS"; Expression={$_.OSPlatform}},
-        Status,
-        @{Name="Interface"; Expression={$_.InterfaceType}},
-        @{Name="LinkSpeed"; Expression={$_.SignalOrSpeed}},
-        @{Name="Latency"; Expression={$_.LatencyStr}},
-        @{Name="Coverage_Tested"; Expression={$_.CoverageTier}},
-        @{Name="TotalOutboundSockets"; Expression={$_.OutboundConnectionsCount}},
-        @{Name="TopSocketProcesses"; Expression={($_.AggregatedSockets | Sort-Object) -join ''}} | 
-        Format-List | Out-String | Write-Host
 
     return $networkAuditResult
 }

@@ -158,15 +158,15 @@ function controlStoragePerformanceTesting{
     if ($isEncrypted -eq $false) { $finalStatus = "WARNING" }
 
     return [PSCustomObject]@{
-        OS                   = $osName
-        Status               = $finalStatus
-        FDE_Active           = $isEncrypted
-        FDE_Type             = $fdeType
-        Seq_Write_MBps       = $writeSpeed
-        Seq_Read_MBps        = $readSpeed
-        Random_4K_Read_IOPS  = $readIops
-        Random_4K_Write_IOPS = $writeIops
-        Storage_Tested       = $storageTested
-        Forensic_Status      = $forensicStatus
+        OS                = $osName
+        Status            = $finalStatus
+        FDEActive         = $isEncrypted
+        FDEType           = $fdeType
+        SeqWriteMBps      = $writeSpeed
+        SeqReadMBps       = $readSpeed
+        Random4KReadIOPS  = $readIops
+        Random4KWriteIOPS = $writeIops
+        StorageTested     = $storageTested
+        ForensicStatus    = $forensicStatus
     }
 }

@@ -65,11 +65,11 @@ if ($NetworkPerimeterTesting){
 }
 
 if ($NetworkCoverageTesting){
-    routeNetworkCoverageTesting | Out-Null
+    routeNetworkCoverageTesting
 }
 
 if ($CheckingRemoteSession){
-    routeCheckingRemoteSession | Out-Null
+    routeCheckingRemoteSession
 }
 
 # Operation
