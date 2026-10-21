@@ -298,19 +298,19 @@ function controlNetworkPerimeterTesting{
     return [PSCustomObject]@{
         OS                = $osName
         Status            = $finalStatus
-        Firewall_Active   = $fwStatus
-        Firewall_Type     = $fwType
-        Roaming_Active    = $roamingActive
+        FirewallActive    = $fwStatus
+        FirewallType      = $fwType
+        RoamingActive     = $roamingActive
         SSID              = $ssid
         BSSID             = $bssid
         SignalPercent     = $signalPercent
-        RSSI_dBm          = $rssi
-        GatewayLatency_ms = $avgLatency
+        RSSIdBm           = $rssi
+        GatewayLatencyms  = $avgLatency
         PacketLossPercent = $packetLoss
-        Egress_Filtering  = $egressTag
-        DNS_Tampering     = $dnsTag
-        Path_MTU          = $mtuTag
-        Firewall_Details  = $fwMessage
-        Roaming_Details   = $roamingMessage
+        EgressFiltering   = $egressTag
+        DNSTampering      = $dnsTag
+        PathMTU           = $mtuTag
+        FirewallDetails   = $fwMessage
+        RoamingDetails    = $roamingMessage
     }
 }
