@@ -1,11 +1,14 @@
 function etl{
     Write-Host "[*] Starts the ETL: Excel to LiteDB process..."
     
-    $databasePath = "$PSScriptRoot\..\Database"
-    $libPath = "$PSScriptRoot\Lib"
-    $excelFile = "$databasePath\EPEAT_Export.xlsx"
-    $dbFile = "$databasePath\sustainability.db"
-    $liteDbDll = "$libPath\LiteDB.dll" 
+    $databasePath = [System.IO.Path]::GetFullPath("$PSScriptRoot/../Database")
+    $libPath = [System.IO.Path]::GetFullPath("$PSScriptRoot/Lib")
+    
+    if (-not (Test-Path $databasePath)) { New-Item -Path $databasePath -ItemType Directory -Force | Out-Null }
+    
+    $excelFile = "$databasePath/EPEAT_Export.xlsx"
+    $dbFile = "$databasePath/sustainability.db"
+    $liteDbDll = "$libPath/LiteDB.dll"
 
     if (-not (Get-Module -ListAvailable -Name ImportExcel)) {
         Write-Host "[-] ImportExcel module not found. Starting installation..." -ForegroundColor Yellow
@@ -21,15 +24,15 @@ function etl{
             New-Item -Path $libPath -ItemType Directory -Force | Out-Null
         }
 
-        $zipPath = "$libPath\litedb.zip"
-        $extractPath = "$libPath\litedb_extracted"
+        $zipPath = "$libPath/litedb.zip"
+        $extractPath = "$libPath/litedb_extracted"
 
         Write-Host "    -> Downloading the LiteDB package..."
         Invoke-WebRequest -Uri "https://www.nuget.org/api/v2/package/LiteDB/5.0.17" -OutFile $zipPath
 
         Write-Host "    -> Extracting and copying DLL..."
         Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
-        Copy-Item -Path "$extractPath\lib\netstandard2.0\LiteDB.dll" -Destination $liteDbDll -Force
+        Copy-Item -Path "$extractPath/lib/netstandard2.0/LiteDB.dll" -Destination $liteDbDll -Force
 
         Remove-Item -Path $zipPath -Force
         Remove-Item -Path $extractPath -Recurse -Force
@@ -73,7 +76,11 @@ function etl{
 
 function helperDataEpeat{
     $today = Get-Date
-    $existingFile = Get-ChildItem -Path "$PSScriptRoot\..\Database\sustainability.db" -ErrorAction SilentlyContinue |
+    
+    $dbPath = [System.IO.Path]::GetFullPath("$PSScriptRoot/../Database")
+    if (-not (Test-Path $dbPath)) { New-Item -Path $dbPath -ItemType Directory -Force | Out-Null }
+    
+    $existingFile = Get-ChildItem -Path "$PSScriptRoot/../Database/sustainability.db" -ErrorAction SilentlyContinue |
                     Sort-Object LastWriteTime -Descending | 
                     Select-Object -First 1
 
@@ -102,7 +109,7 @@ function helperDataEpeat{
                 } `
                 -ContentType "application/json" `
                 -Body $payload `
-                -OutFile "$PSScriptRoot\..\Database\EPEAT_Export.xlsx"
+                -OutFile "$dbPath/EPEAT_Export.xlsx"
 
             etl
         }

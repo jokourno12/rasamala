@@ -119,8 +119,8 @@ function controlCheckingRemoteSession{
             # PERBAIKAN: Membaca DMI via sysfs tanpa butuh akses sudo/root
             $sysVendorFile = "/sys/devices/virtual/dmi/id/sys_vendor"
             $sysProductFile = "/sys/devices/virtual/dmi/id/product_name"
-            if (Test-Path $sysVendorFile) { $sysManufacturer = (Get-Content$sysVendorFile -ErrorAction SilentlyContinue).Trim() }
-            if (Test-Path $sysProductFile) { $sysModel = (Get-Content$sysProductFile -ErrorAction SilentlyContinue).Trim() }
+            if (Test-Path $sysVendorFile) { $sysManufacturer = (Get-Content $sysVendorFile -ErrorAction SilentlyContinue).Trim() }
+            if (Test-Path $sysProductFile) { $sysModel = (Get-Content $sysProductFile -ErrorAction SilentlyContinue).Trim() }
             
             if ($sysManufacturer -or $sysModel) {$hardwareModel = "$sysManufacturer$sysModel".Trim()
             } else {

@@ -156,7 +156,7 @@ function controlNetworkCoverageTesting{
                     }
                 }
 
-                $ping = Test-Connection -TargetName$gateway -Count 3 -ErrorAction SilentlyContinue
+                $ping = Test-Connection -TargetName $gateway -Count 3 -ErrorAction SilentlyContinue
                 if ($ping) {
                     $validPings =$ping | Where-Object { $_.ResponseTime -ne$null -or $_.Latency -ne$null }
                     if ($validPings) {
