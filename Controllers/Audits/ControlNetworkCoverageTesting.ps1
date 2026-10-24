@@ -340,6 +340,28 @@ function controlNetworkCoverageTesting{
         "`n- $procName (PID: $allPids) | $statusTag : $socketCount Sockets"
     }
 
+    $trustedRootOrgsFormatted = "N/A (OS Not Supported)"
+    if ($IsWindows -or $IsLinux) {
+        try {
+            $certPath = if ($IsWindows) { "Cert:\LocalMachine\AuthRoot" } else { "Cert:\LocalMachine\Root" }
+            
+            $authRootData = Get-ChildItem -Path $certPath -ErrorAction SilentlyContinue | Select-Object @{N='Organization'; Expression={
+                if ($_.Subject -match 'O=(?:"([^"]+)"|([^,]+))') { $Matches[1] + $Matches[2] }
+            }} | Where-Object { $_.Organization -ne $null } | Group-Object Organization -NoElement | Sort-Object Count -Descending
+
+            $orgLines = foreach ($item in $authRootData) {
+                "`n- $($item.Name) : $($item.Count) Certificates"
+            }
+            $trustedRootOrgsFormatted = ($orgLines) -join ''
+            
+            if ([string]::IsNullOrWhiteSpace($trustedRootOrgsFormatted)) {
+                $trustedRootOrgsFormatted = "`n- No trusted roots found or access denied"
+            }
+        } catch {
+            $trustedRootOrgsFormatted = "`n- Error retrieving Root certificates"
+        }
+    }
+
     $networkAuditResult = [PSCustomObject]@{
         OSPlatform               = $osPlatform
         Status                   = $auditStatus
@@ -352,6 +374,7 @@ function controlNetworkCoverageTesting{
         ListeningPorts           = $portList
         OutboundConnectionsCount = $outboundConns.Count
         TopSocketProcesses       = ($aggregatedResults | Sort-Object) -join ''
+        TrustedRootOrganizations = $trustedRootOrgsFormatted
     }
 
     return $networkAuditResult
