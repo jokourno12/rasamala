@@ -105,5 +105,68 @@ function controlAuditEndpoint{
     
     Write-Host ("| {0} |" -f $bottomText.PadRight($totalInnerWidth - 2)) -ForegroundColor White
     Write-Host $borderTopBottom -ForegroundColor Cyan
-    Write-Host ""
+
+    $r3  = "■ R3:User"
+    $r0  = "□ R0:Kernel"
+    $rm1 = "□ R-1:Hypervisor"
+    $rm2 = "□ R-2:Firmware"
+    $rm3 = "□ R-3:Chipset"
+
+    if ($IsWindows) {
+        $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+
+        if ($isAdmin) {
+            $r0 = "■ R0:Kernel"
+            
+            $cs = Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue
+            if ($cs -and $cs.HypervisorPresent) { $rm1 = "■ R-1:Hypervisor" }
+
+            $uefi = Test-Path "HKLM:\System\CurrentControlSet\Control\SecureBoot\State"
+            if ($uefi) { $rm2 = "■ R-2:Firmware" }
+
+            $chipset = Get-CimInstance Win32_PnPEntity -Filter "Name LIKE '%Management Engine%' OR Name LIKE '%Platform Security Processor%'" -ErrorAction SilentlyContinue
+            if ($chipset) { $rm3 = "■ R-3:Chipset" }
+        }
+    } 
+    elseif ($IsLinux) {
+        # Pengecekan akses Root pada Linux
+        $isRoot = ([Environment]::UserName -eq 'root') -or ((id -u 2>$null) -eq '0')
+
+        if ($isRoot) {
+            $r0 = "■ R0:Kernel"
+
+            # Deteksi Hypervisor di Linux (/sys atau /proc/cpuinfo)
+            if ((Test-Path "/sys/hypervisor/type") -or (Select-String -Path "/proc/cpuinfo" -Pattern "hypervisor" -Quiet -ErrorAction SilentlyContinue)) { 
+                $rm1 = "■ R-1:Hypervisor" 
+            }
+
+            # Deteksi UEFI Firmware di Linux (/sys/firmware/efi)
+            if (Test-Path "/sys/firmware/efi") { 
+                $rm2 = "■ R-2:Firmware" 
+            }
+
+            # Deteksi Chipset Engine (Intel ME / AMD PSP) via device node atau lspci
+            if ((Test-Path "/dev/mei0") -or (lspci 2>$null | Select-String -Pattern "Management Engine|PSP")) { 
+                $rm3 = "■ R-3:Chipset" 
+            }
+        }
+    }
+
+    Write-Host "SCOPE│" -NoNewline -ForegroundColor DarkGray
+    Write-Host "$r3 " -NoNewline -ForegroundColor Cyan
+    Write-Host "│" -NoNewline -ForegroundColor DarkGray
+    
+    $rings = @($r0, $rm1, $rm2, $rm3)
+    foreach ($ring in $rings) {
+        if ($ring -match "■") { 
+            Write-Host "$ring " -NoNewline -ForegroundColor Green
+        } else { 
+            Write-Host "$ring " -NoNewline -ForegroundColor DarkGray
+        }
+        
+        if ($ring -ne $rings[-1]) { 
+            Write-Host "│" -NoNewline -ForegroundColor DarkGray 
+        }
+    }
+    Write-Host "`n"
 }
