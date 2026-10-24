@@ -15,22 +15,29 @@ function controlOperationEndpoint{
     [Terminal.Gui.Application]::Init()
 
     # 4. Konstruksi Skema Warna (Dark Gray Theme)
-    $darkTreeScheme = [Terminal.Gui.ColorScheme]::new()
+    Write-Host -NoNewline "`e]4;2;#1B5E20`a"
     
-    $normalAttr    = [Terminal.Gui.Attribute]::new([Terminal.Gui.Color]::White, [Terminal.Gui.Color]::DarkGray)
-    $focusAttr     = [Terminal.Gui.Attribute]::new([Terminal.Gui.Color]::Black, [Terminal.Gui.Color]::Gray)
-    $hotNormalAttr = [Terminal.Gui.Attribute]::new([Terminal.Gui.Color]::BrightYellow, [Terminal.Gui.Color]::DarkGray)
-    $hotFocusAttr  = [Terminal.Gui.Attribute]::new([Terminal.Gui.Color]::BrightYellow, [Terminal.Gui.Color]::Gray)
+    # Menimpa Color 3 (Brown/Yellow) menjadi Cokelat Batang Kayu Tua (Hex: #3E2723)
+    #Write-Host -NoNewline "`e]4;3;#3E2723`a"
 
-    $darkTreeScheme.Normal    = $normalAttr
-    $darkTreeScheme.Focus     = $focusAttr
-    $darkTreeScheme.HotNormal = $hotNormalAttr
-    $darkTreeScheme.HotFocus  = $hotFocusAttr
 
-    [Terminal.Gui.Colors]::Base = $darkTreeScheme
-    [Terminal.Gui.Colors]::TopLevel = $darkTreeScheme
+    # 4. Konstruksi Skema Warna (Sekarang Green dan Brown menggunakan warna Hex di atas)
+    $treeScheme = [Terminal.Gui.ColorScheme]::new()
+    
+    $normalAttr    = [Terminal.Gui.Attribute]::new([Terminal.Gui.Color]::Green, [Terminal.Gui.Color]::Brown)
+    $focusAttr     = [Terminal.Gui.Attribute]::new([Terminal.Gui.Color]::Brown, [Terminal.Gui.Color]::Green)
+    $hotNormalAttr = [Terminal.Gui.Attribute]::new([Terminal.Gui.Color]::White, [Terminal.Gui.Color]::Brown)
+    $hotFocusAttr  = [Terminal.Gui.Attribute]::new([Terminal.Gui.Color]::White, [Terminal.Gui.Color]::Green)
+
+    $treeScheme.Normal    = $normalAttr
+    $treeScheme.Focus     = $focusAttr
+    $treeScheme.HotNormal = $hotNormalAttr
+    $treeScheme.HotFocus  = $hotFocusAttr
+
+    [Terminal.Gui.Colors]::Base = $treeScheme
+    [Terminal.Gui.Colors]::TopLevel = $treeScheme
     $top = [Terminal.Gui.Application]::Top
-    $top.ColorScheme = $darkTreeScheme
+    $top.ColorScheme = $treeScheme
 
     # ---------------------------------------------------------
     # MEKANISME KUNCI KELUAR (ANTI CTRL+Q / SALAH PENCET)
@@ -112,12 +119,12 @@ function controlOperationEndpoint{
     $lblLog.X = 1
     $lblLog.Y = 0
 
-    $lblHotkeys = [Terminal.Gui.Label]::new("HOTKEYS: [Tab] Pindah Panel  |  [Mouse Click] Pilih Menu")
+    $lblHotkeys = [Terminal.Gui.Label]::new("HOTKEYS: [Tab] Panel  |  [Click] Menu")
     $lblHotkeys.X = 1
     $lblHotkeys.Y = 1
 
-    $btnExit = [Terminal.Gui.Button]::new(" [ EXIT COCKPIT ] ")
-    $btnExit.X = [Terminal.Gui.Pos]::Right($footerPanel) - 22
+    $btnExit = [Terminal.Gui.Button]::new("EXIT COCKPIT")
+    $btnExit.X = [Terminal.Gui.Pos]::Right($footerPanel) - 28
     $btnExit.Y = 1
     $btnExit.add_Clicked({
         $jawaban = [Terminal.Gui.MessageBox]::Query("PERINGATAN", "Apakah Anda yakin ingin keluar dari Rasamala Cockpit?", [string[]]@("Batal", "Ya, Keluar"))
