@@ -8,11 +8,12 @@ param(
         [switch]$NetworkCoverageTesting,
         [switch]$CheckingRemoteSession,
 
-    [switch]$EndpointMetric,
-    [switch]$AqlMonitoring,
-    [switch]$BrowserIsolation,
-    [switch]$JavaScriptRuntime,
-    [switch]$BrowserTunnel,
+    [switch]$OperationEndpoint,
+        [switch]$EndpointMetric,
+        [switch]$AqlMonitoring,
+        [switch]$BrowserIsolation,
+        [switch]$JavaScriptRuntime,
+        [switch]$BrowserTunnel,
 
     [switch]$F5Reset,
 
@@ -73,6 +74,10 @@ if ($CheckingRemoteSession){
 }
 
 # Operation
+if ($OperationEndpoint){
+    routeOperationEndpoint
+}
+
 if ($EndpointMetric){
     routeEndpointMetric
 }
