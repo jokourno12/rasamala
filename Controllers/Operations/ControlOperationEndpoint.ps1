@@ -1,3 +1,6 @@
+. $PSScriptRoot\beacon\BeaconBrowserIsolation.ps1
+. $PSScriptRoot\beacon\BeaconAqlMonitoring.ps1
+
 function controlOperationEndpoint{
     # 1. Resolusi path relatif ke Helpers\Lib
     $libDir = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\..\Helpers\Lib"))
@@ -14,11 +17,11 @@ function controlOperationEndpoint{
     # 3. Inisialisasi TUI
     [Terminal.Gui.Application]::Init()
 
-    # 4. Konstruksi Skema Warna (Dark Gray Theme)
+    # Leaf
     Write-Host -NoNewline "`e]4;2;#1B5E20`a"
     
-    # Menimpa Color 3 (Brown/Yellow) menjadi Cokelat Batang Kayu Tua (Hex: #3E2723)
-    #Write-Host -NoNewline "`e]4;3;#3E2723`a"
+    # Wood
+    Write-Host -NoNewline "`e]4;3;#827e80`a"
 
 
     # 4. Konstruksi Skema Warna (Sekarang Green dan Brown menggunakan warna Hex di atas)
@@ -63,7 +66,7 @@ function controlOperationEndpoint{
     $win.Height = [Terminal.Gui.Dim]::Fill()
 
     # [1. HEADER]
-    $headerPanel = [Terminal.Gui.FrameView]::new(" RASAMALA COCKPIT - OPERATION MODULE ")
+    $headerPanel = [Terminal.Gui.FrameView]::new(" RASAMALA BEACON - OPERATION MODULE ")
     $headerPanel.X = 0
     $headerPanel.Y = 0
     $headerPanel.Width = [Terminal.Gui.Dim]::Fill()
@@ -81,7 +84,7 @@ function controlOperationEndpoint{
     $navPanel.Width = 25
     $navPanel.Height = [Terminal.Gui.Dim]::Fill(4)
 
-    $menuItems = [string[]]@("Metrics", "Isolation", "Tunnel", "AQL Mon", "JS Runtime")
+    $menuItems = [string[]]@("Isolation", "AQL Monitor")
     $menuList = [Terminal.Gui.ListView]::new($menuItems)
     $menuList.X = 0
     $menuList.Y = 0
@@ -97,16 +100,59 @@ function controlOperationEndpoint{
     $contentPanel.Height = [Terminal.Gui.Dim]::Fill(4)
 
     $lblTitle = [Terminal.Gui.Label]::new("Modul Aktif: [ Belum Ada Data ]")
-    $lblTitle.X = 2
+    $lblTitle.X = 1
     $lblTitle.Y = 2
+    $contentPanel.Add($lblTitle)
 
-    $btnRun = [Terminal.Gui.Button]::new(" [ TEST TOMBOL ] ")
-    $btnRun.X = 2
-    $btnRun.Y = 5
-    $btnRun.add_Clicked({
-        [Terminal.Gui.MessageBox]::Query("WORKSPACE", "Tombol di panel Content berfungsi!", [string[]]@("OK")) | Out-Null
-    })
-    $contentPanel.Add($lblTitle, $btnRun)
+    $panggilIsolation = { beaconBrowserIsolation }
+    $panggilAql       = { beaconAqlMonitoring }
+
+    $menuList.add_SelectedItemChanged({
+        param($e) 
+        
+        # 1. Bersihkan layar Workspace
+        $contentPanel.RemoveAll()
+
+        # Gunakan INDEX ANGKA agar 100% akurat (0 = Isolation, 1 = AQL Monitor)
+        $selectedIndex = $e.Item
+
+        $hasilFungsi = $null
+
+        if ($selectedIndex -eq 0) {
+            # Coba panggil fungsi Isolation
+            $hasilFungsi = & $panggilIsolation
+        }
+        elseif ($selectedIndex -eq 1) {
+            # Coba panggil fungsi AQL
+            $hasilFungsi = & $panggilAql
+        }
+
+        # ---------------------------------------------------------
+        # BLOK DIAGNOSTIK UTAMA
+        # ---------------------------------------------------------
+        if ($null -eq $hasilFungsi -or $hasilFungsi -eq "") {
+            # JIKA KOSONG: Tampilkan peringatan merah di Workspace
+            $lblError = [Terminal.Gui.Label]::new("GAGAL: Data kosong! Pastikan tidak memakai Write-Host.")
+            $lblError.X = 2
+            $lblError.Y = 2
+            $lblError.ColorScheme = $top.ColorScheme # Gunakan warna tema agar jelas
+            $contentPanel.Add($lblError)
+        }
+        else {
+            # JIKA BERHASIL: Proses data menjadi Label jika masih teks
+            if ($hasilFungsi -isnot [Terminal.Gui.View]) {
+                $lblData = [Terminal.Gui.Label]::new([string]$hasilFungsi)
+                $lblData.X = 2
+                $lblData.Y = 2
+                $hasilFungsi = $lblData
+            }
+            $contentPanel.Add($hasilFungsi)
+        }
+
+        # Render ulang
+        $contentPanel.SetNeedsDisplay()
+        
+    }.GetNewClosure())
 
     # [4. FOOTER]
     $footerPanel = [Terminal.Gui.FrameView]::new(" LOG STREAM & HOTKEYS ")
@@ -123,11 +169,11 @@ function controlOperationEndpoint{
     $lblHotkeys.X = 1
     $lblHotkeys.Y = 1
 
-    $btnExit = [Terminal.Gui.Button]::new("EXIT COCKPIT")
+    $btnExit = [Terminal.Gui.Button]::new("EXIT BEACON")
     $btnExit.X = [Terminal.Gui.Pos]::Right($footerPanel) - 28
     $btnExit.Y = 1
     $btnExit.add_Clicked({
-        $jawaban = [Terminal.Gui.MessageBox]::Query("PERINGATAN", "Apakah Anda yakin ingin keluar dari Rasamala Cockpit?", [string[]]@("Batal", "Ya, Keluar"))
+        $jawaban = [Terminal.Gui.MessageBox]::Query("PERINGATAN", "Apakah Anda yakin ingin keluar dari Rasamala Beacon?", [string[]]@("Batal", "Ya, Keluar"))
         
         if ($jawaban -eq 1) {
             # Buka gembok pengaman karena dikonfirmasi dari tombol
