@@ -14,10 +14,9 @@ param(
         [switch]$BrowserIsolation,
         [switch]$JavaScriptRuntime,
         [switch]$BrowserTunnel,
+        [switch]$SlaInfo,
 
     [switch]$F5Reset,
-
-    [switch]$SlaInfo,
 
     # AQL Monitoring
     [ValidateSet(7, 14, 28, 42)]
