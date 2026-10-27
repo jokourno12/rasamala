@@ -1,5 +1,3 @@
-. $PSScriptRoot\..\..\Config\Windows.ps1
-
 function controlF5Reset {
     Write-Host "`n[*] Memulai Diagnosa dan Reset F5..." -ForegroundColor Cyan
 
