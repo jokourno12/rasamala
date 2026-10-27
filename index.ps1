@@ -17,6 +17,7 @@ param(
         [switch]$SlaInfo,
 
     [switch]$F5Reset,
+    [switch]$CrashStabilization,
 
     # AQL Monitoring
     [ValidateSet(7, 14, 28, 42)]
@@ -97,13 +98,16 @@ if ($BrowserTunnel){
     routeBrowserTunnel
 }
 
+if ($SlaInfo){
+    helperSlaInfo -Client $Client
+    exit
+}
+
 # Remediation
 if ($F5Reset){
     routeF5Reset
 }
 
-# Information
-if ($SlaInfo){
-    helperSlaInfo -Client $Client
-    exit
+if ($CrashStabilization){
+    routeCrashStabilization
 }
