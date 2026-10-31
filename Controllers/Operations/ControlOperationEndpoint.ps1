@@ -23,8 +23,7 @@ function controlOperationEndpoint{
     # Wood
     Write-Host -NoNewline "`e]4;3;#827e80`a"
 
-
-    # 4. Konstruksi Skema Warna (Sekarang Green dan Brown menggunakan warna Hex di atas)
+    # 4. Konstruksi Skema Warna
     $treeScheme = [Terminal.Gui.ColorScheme]::new()
     
     $normalAttr    = [Terminal.Gui.Attribute]::new([Terminal.Gui.Color]::Green, [Terminal.Gui.Color]::Brown)
@@ -49,8 +48,6 @@ function controlOperationEndpoint{
 
     $top.add_Closing({
         param($eventArgs)
-        # Jika tombol Exit belum diklik ($isSafeToExit masih False),
-        # maka batalkan perintah keluar dari shortcut apapun.
         if ($script:isSafeToExit -eq $false) {
             $eventArgs.Cancel = $true
         }
@@ -99,47 +96,43 @@ function controlOperationEndpoint{
     $contentPanel.Width = [Terminal.Gui.Dim]::Fill()
     $contentPanel.Height = [Terminal.Gui.Dim]::Fill(4)
 
-    $lblTitle = [Terminal.Gui.Label]::new("Modul Aktif: [ Belum Ada Data ]")
+    # =========================================================
+    # INISIALISASI VIEW LOKAL SATU KALI DI AWAL
+    # =========================================================
+    $viewIsolationLokal = beaconBrowserIsolation
+    $viewAqlLokal       = beaconAqlMonitoring
+
+    $lblTitle = [Terminal.Gui.Label]::new("Welcome to Rasamala")
     $lblTitle.X = 1
     $lblTitle.Y = 2
     $contentPanel.Add($lblTitle)
 
-    $panggilIsolation = { beaconBrowserIsolation }
-    $panggilAql       = { beaconAqlMonitoring }
-
     $menuList.add_SelectedItemChanged({
         param($e) 
         
-        # 1. Bersihkan layar Workspace
+        # Bersihkan layar Workspace
         $contentPanel.RemoveAll()
 
-        # Gunakan INDEX ANGKA agar 100% akurat (0 = Isolation, 1 = AQL Monitor)
         $selectedIndex = $e.Item
-
         $hasilFungsi = $null
 
+        # Panggil View dari variabel lokal yang telah diinisialisasi
         if ($selectedIndex -eq 0) {
-            # Coba panggil fungsi Isolation
-            $hasilFungsi = & $panggilIsolation
+            $hasilFungsi = $viewIsolationLokal
         }
         elseif ($selectedIndex -eq 1) {
-            # Coba panggil fungsi AQL
-            $hasilFungsi = & $panggilAql
+            $hasilFungsi = $viewAqlLokal
         }
 
-        # ---------------------------------------------------------
-        # BLOK DIAGNOSTIK UTAMA
-        # ---------------------------------------------------------
+        # DIAGNOSTIK
         if ($null -eq $hasilFungsi -or $hasilFungsi -eq "") {
-            # JIKA KOSONG: Tampilkan peringatan merah di Workspace
             $lblError = [Terminal.Gui.Label]::new("GAGAL: Data kosong! Pastikan tidak memakai Write-Host.")
             $lblError.X = 2
             $lblError.Y = 2
-            $lblError.ColorScheme = $top.ColorScheme # Gunakan warna tema agar jelas
+            $lblError.ColorScheme = $top.ColorScheme
             $contentPanel.Add($lblError)
         }
         else {
-            # JIKA BERHASIL: Proses data menjadi Label jika masih teks
             if ($hasilFungsi -isnot [Terminal.Gui.View]) {
                 $lblData = [Terminal.Gui.Label]::new([string]$hasilFungsi)
                 $lblData.X = 2
@@ -176,17 +169,17 @@ function controlOperationEndpoint{
         $jawaban = [Terminal.Gui.MessageBox]::Query("PERINGATAN", "Apakah Anda yakin ingin keluar dari Rasamala Beacon?", [string[]]@("Batal", "Ya, Keluar"))
         
         if ($jawaban -eq 1) {
-            # Buka gembok pengaman karena dikonfirmasi dari tombol
             $script:isSafeToExit = $true
             [Terminal.Gui.Application]::RequestStop()
         }
     })
-    $footerPanel.Add($lblLog, $lblHotkeys, $btnExit)
+    
+    $footerPanel.Add([Terminal.Gui.View[]]@($lblLog, $lblHotkeys, $btnExit))
 
     # ---------------------------------------------------------
     # RENDER SEMUA PANEL
     # ---------------------------------------------------------
-    $win.Add($headerPanel, $navPanel, $contentPanel, $footerPanel)
+    $win.Add([Terminal.Gui.View[]]@($headerPanel, $navPanel, $contentPanel, $footerPanel))
     $top.Add($win)
 
     [Terminal.Gui.Application]::Run()
