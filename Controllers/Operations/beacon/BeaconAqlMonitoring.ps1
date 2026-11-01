@@ -27,12 +27,12 @@ function beaconAqlMonitoring{
         if (-not $script:aqlJobRunning) {
             $script:aqlJobRunning = $true
             $btnAction.Text = "Hentikan Test"
-            $lblStatus.Text = "Status: [ RUNNING ] Job AQL Berjalan di Background"
+            $lblStatus.Text = "Status: [ RUNNING ] Thread Job AQL Berjalan"
 
-            $txtLog.Text = "[*] Memulai Background Job AQL...`n"
+            $txtLog.Text = "[*] Memulai Multi-Thread Job AQL...`n"
 
-            # Command percobaan konkuren untuk AQL
-            $script:currentAqlJob = Start-Job -ScriptBlock {
+            # Command percobaan konkuren untuk AQL menggunakan ThreadJob
+            $script:currentAqlJob = Start-ThreadJob -ScriptBlock {
                 for ($i = 1; $i -le 50; $i++) {
                     [PSCustomObject]@{ Time = (Get-Date).ToString("HH:mm:ss"); Message = "AQL Test Loop #$i" }
                     Start-Sleep -Seconds 1

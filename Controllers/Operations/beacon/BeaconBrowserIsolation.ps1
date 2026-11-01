@@ -4,78 +4,82 @@ function beaconBrowserIsolation{
     $view.Width = [Terminal.Gui.Dim]::Fill()
     $view.Height = [Terminal.Gui.Dim]::Fill()
 
-    # Status persisten untuk Isolation Job
-    if ($null -eq $script:isoJobRunning) { $script:isoJobRunning = $false }
-    if ($null -eq $script:currentIsoJob) { $script:currentIsoJob = $null }
+    # Status persisten untuk eksekusi terminal manual
+    if ($null -eq $script:manualJob) { $script:manualJob = $null }
 
-    $lblStatus = [Terminal.Gui.Label]::new("Status: [ READY ] Menunggu Tes Isolation")
-    $lblStatus.X = 1
-    $lblStatus.Y = 1
+    # [1] Baris Input Terminal Manual (Digeser ke atas)
+    $lblInput = [Terminal.Gui.Label]::new("PS> ")
+    $lblInput.X = 1
+    $lblInput.Y = 1
 
-    $btnAction = [Terminal.Gui.Button]::new("Jalankan Test Isolation")
-    $btnAction.X = 1
-    $btnAction.Y = 3
+    $txtInput = [Terminal.Gui.TextField]::new("")
+    $txtInput.X = [Terminal.Gui.Pos]::Right($lblInput)
+    $txtInput.Y = 1
+    $txtInput.Width = [Terminal.Gui.Dim]::Fill(1)
 
+    # [2] Baris Log Stream
     $txtLog = [Terminal.Gui.TextView]::new()
     $txtLog.X = 1
-    $txtLog.Y = 5
+    $txtLog.Y = 3
     $txtLog.Width = [Terminal.Gui.Dim]::Fill(1)
     $txtLog.Height = [Terminal.Gui.Dim]::Fill(1)
     $txtLog.ReadOnly = $true
 
-    $btnAction.add_Clicked({
-        if (-not $script:isoJobRunning) {
-            $script:isoJobRunning = $true
-            $btnAction.Text = "Hentikan Test"
-            $lblStatus.Text = "Status: [ RUNNING ] Job Isolation Berjalan di Background"
-
-            $txtLog.Text = "[*] Memulai Background Job Isolation...`n"
-
-            # Command percobaan konkuren untuk Isolation
-            $script:currentIsoJob = Start-Job -ScriptBlock {
-                for ($j = 1; $j -le 50; $j++) {
-                    [PSCustomObject]@{ Time = (Get-Date).ToString("HH:mm:ss"); Message = "Isolation Workspace Active #$j" }
-                    Start-Sleep -Seconds 3
+    # ---------------------------------------------------------
+    # EVENT: EKSEKUSI PERINTAH MANUAL (ENTER DI TEXTFIELD)
+    # ---------------------------------------------------------
+    $txtInput.add_KeyPress({
+        param($e)
+        if ($e.KeyEvent.Key -eq [Terminal.Gui.Key]::Enter) {
+            $command = $txtInput.Text.ToString().Trim()
+            
+            if (-not [string]::IsNullOrWhiteSpace($command)) {
+                
+                # Intersepsi perintah manipulasi UI (Terminal Tiruan)
+                if ($command.ToLower() -eq 'clear' -or $command.ToLower() -eq 'cls') {
+                    $txtLog.Text = ""
+                    $txtInput.Text = ""
+                    $view.SetNeedsDisplay()
+                    $e.Handled = $true 
+                    return
                 }
-            }
 
-            # Polling hasil job menggunakan MainLoop agar UI tidak freeze
-            [Terminal.Gui.Application]::MainLoop.AddTimeout([System.TimeSpan]::FromMilliseconds(500), {
-                param()
-                if ($script:isoJobRunning -and $null -ne $script:currentIsoJob) {
-                    $newData = Receive-Job -Job $script:currentIsoJob
-                    if ($newData) {
-                        $formatted = foreach ($item in $newData) { "[$($item.Time)] $($item.Message)" }
-                        $txtLog.Text = $txtLog.Text.ToString() + ($formatted -join "`n") + "`n"
-                        $view.SetNeedsDisplay()
-                    }
+                $txtLog.Text = $txtLog.Text.ToString() + "PS> $command`n"
+                
+                # Eksekusi latar belakang dengan aliran real-time
+                $script:manualJob = Start-ThreadJob -ScriptBlock {
+                    param($cmd)
+                    Invoke-Expression "$cmd *>&1" | ForEach-Object { "$_" }
+                } -ArgumentList $command
 
-                    if ($script:currentIsoJob.State -ne 'Running') {
-                        $script:isoJobRunning = $false
-                        $btnAction.Text = "Jalankan Test Isolation"
-                        $lblStatus.Text = "Status: [ READY ] Selesai"
-                        Remove-Job -Job $script:currentIsoJob -Force
-                        $script:currentIsoJob = $null
-                        return $false
+                # Polling hasil eksekusi manual agar UI tidak freeze
+                [Terminal.Gui.Application]::MainLoop.AddTimeout([System.TimeSpan]::FromMilliseconds(500), {
+                    param()
+                    if ($null -ne $script:manualJob) {
+                        $output = Receive-Job -Job $script:manualJob
+                        if ($output) {
+                            $txtLog.Text = $txtLog.Text.ToString() + ($output -join "`n") + "`n"
+                            $view.SetNeedsDisplay()
+                        }
+
+                        if ($script:manualJob.State -ne 'Running') {
+                            Remove-Job -Job $script:manualJob -Force
+                            $script:manualJob = $null
+                            return $false # Hentikan timer ini
+                        }
+                        return $true # Lanjutkan timer
                     }
-                    return $true
-                }
-                return $false
-            })
-        } else {
-            $script:isoJobRunning = $false
-            if ($null -ne $script:currentIsoJob) {
-                Stop-Job -Job $script:currentIsoJob
-                Remove-Job -Job $script:currentIsoJob -Force
-                $script:currentIsoJob = $null
+                    return $false
+                })
+
+                $txtInput.Text = ""
+                $view.SetNeedsDisplay()
             }
-            $btnAction.Text = "Jalankan Test Isolation"
-            $lblStatus.Text = "Status: [ STOPPED ] Dihentikan User"
-            $txtLog.Text = $txtLog.Text.ToString() + "`n[-] Test dihentikan.`n"
+            $e.Handled = $true 
         }
-        $view.SetNeedsDisplay()
     }.GetNewClosure())
 
-    $view.Add([Terminal.Gui.View[]]@($lblStatus, $btnAction, $txtLog))
+    # [3] Memasukkan elemen ke dalam View
+    $view.Add([Terminal.Gui.View[]]@($lblInput, $txtInput, $txtLog))
     return $view
 }
