@@ -6,5 +6,5 @@ function routeF5Reset{
 }
 
 function routeCrashStabilization{
-    controlCrashStabilzation
+    controlCrashStabilization
 }
