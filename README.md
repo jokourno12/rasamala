@@ -3,7 +3,7 @@
 
 ![demo](Helpers/rasamala-banner.gif)
 
-The security tool for system diagnostics and issue resolution.
+Analyst Readiness Tool for secure endpoint preparation.
 
 ## Well Architected Development Principles
 Rasamala eliminates configuration drift and operational waste through a centralized dispatcher and modular design:

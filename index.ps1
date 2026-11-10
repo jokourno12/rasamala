@@ -23,10 +23,6 @@ param(
     [ValidateSet(7, 14, 28, 42)]
     [int]$InitialInterval = 7,
 
-    #SLA Information
-    [ValidateSet('All', 'Taspen', 'Pertamina')]
-    [string]$Client = 'All',
-
     #Isolated Session
     [Parameter(Mandatory=$false)]
     [string]$TargetUrl = "about:blank"

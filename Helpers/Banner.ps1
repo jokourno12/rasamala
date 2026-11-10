@@ -1,5 +1,3 @@
-. "$PSScriptRoot/../Config/Windows.ps1"
-
 function helperBanner {
 $banner =
 "                      
@@ -12,7 +10,7 @@ $banner =
                   v1.0
               S2025110106
 =======================================
-       [ SECURITY ENDPOINT TOOL ]
+       [ ANALYST READINESS TOOL ]
                TANGERANG
               2026 - 2027
 =======================================                                               
