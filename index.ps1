@@ -110,7 +110,9 @@ if ($SlaInfo){
 
 # ForensicMonitoring
 if ($ForensicMonitoring){
+    Write-Host " [DEBUG] Switch ForensicMonitoring terdeteksi di Index!" -ForegroundColor Yellow
     routeForensicMonitoring
+    exit
 }
 
 if ($EndpointMetric){
