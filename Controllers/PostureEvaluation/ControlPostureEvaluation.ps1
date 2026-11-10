@@ -1,4 +1,4 @@
-function controlAuditEndpoint{
+function controlPostureEvaluation{
     $InformationPreference = 'SilentlyContinue'
 
     $auditResults = [ordered]@{
@@ -78,13 +78,13 @@ function controlAuditEndpoint{
   
     Write-Host "`n$borderTopBottom" -ForegroundColor Cyan
     
-    $title = "RASAMALA v1.0 - ENDPOINT SUMMARY"
+    $title = "RASAMALA v1.0 - POSTURE SUMMARY"
     $padLeft = [math]::Floor(($totalInnerWidth - $title.Length) / 2)
     $padRight = $totalInnerWidth - $title.Length - $padLeft
     Write-Host ("|{0}{1}{2}|" -f (" " * $padLeft), $title, (" " * $padRight)) -ForegroundColor Yellow
 
     Write-Host $borderMid -ForegroundColor Cyan
-    Write-Host ("| {0} | {1} | {2} |" -f "AUDIT MODULE".PadRight($lenModul), "STATUS".PadRight($lenStatus), "SUMMARY FINDINGS".PadRight($lenRingkasan)) -ForegroundColor Yellow
+    Write-Host ("| {0} | {1} | {2} |" -f "POSTURE MODULE".PadRight($lenModul), "STATUS".PadRight($lenStatus), "SUMMARY FINDINGS".PadRight($lenRingkasan)) -ForegroundColor Yellow
     Write-Host $borderMid -ForegroundColor Cyan
 
     $warningCount = 0

@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [switch]$AuditEndpoint,
+    [switch]$PostureEvaluation,
         [switch]$ProcessorStressTesting,
         [switch]$CheckingUpdateSystem,
         [switch]$StoragePerformanceTesting,
@@ -8,20 +8,24 @@ param(
         [switch]$NetworkCoverageTesting,
         [switch]$CheckingRemoteSession,
 
-    [switch]$OperationEndpoint,
+    [switch]$SecurityControl,
         [switch]$F5Reset,
         [switch]$CrashStabilization,
         [switch]$BrowserIsolation,
         [switch]$JavaScriptRuntime,
         [switch]$BrowserTunnel,
-        [switch]$SlaInfo,
 
-    [switch]$EndpointMetric,
-    [switch]$AqlMonitoring,
+    [switch]$ForensicMonitoring,
+        [switch]$EndpointMetric,
+        [switch]$AqlMonitoring,
 
-    [switch]$Log,
+    [switch]$RecordKeeping,
+        [switch]$Log,
 
-    [switch]$Snapshot,
+    [switch]$BackupStrategy,
+        [switch]$Snapshot,
+
+    [switch]$SlaInfo,
 
     # AQL Monitoring
     [ValidateSet(7, 14, 28, 42)]
@@ -47,8 +51,8 @@ function showBanner {
 
 showBanner
 # PostureEvaluation
-if ($AuditEndpoint){
-    routeAuditEndpoint
+if ($PostureEvaluation){
+    routePostureEvaluation
 }
 
 if ($ProcessorStressTesting){
@@ -76,8 +80,8 @@ if ($CheckingRemoteSession){
 }
 
 # SecurityControl
-if ($OperationEndpoint){
-    routeOperationEndpoint
+if ($SecurityControl){
+    routeSecurityControl
 }
 
 if ($F5Reset){
@@ -105,6 +109,10 @@ if ($SlaInfo){
 }
 
 # ForensicMonitoring
+if ($ForensicMonitoring){
+    routeForensicMonitoring
+}
+
 if ($EndpointMetric){
     routeEndpointMetric
 }
@@ -114,12 +122,19 @@ if ($AqlMonitoring){
 }
 
 # RecordKeeping
+if ($RecordKeeping){
+    routeRecordKeeping
+}
+
 if ($Log){
     routeLog
 }
 
-
 # BackupStrategy
+if ($BackupStrategy){
+    routeBackupStrategy
+}
+
 if ($Snapshot){
     routeSnapshot
 }

@@ -1,7 +1,7 @@
 . $PSScriptRoot\beacon\BeaconBrowserIsolation.ps1
 . $PSScriptRoot\beacon\BeaconAqlMonitoring.ps1
 
-function controlOperationEndpoint{
+function controlSecurityControl{
     # 1. Resolusi path relatif ke Helpers\Lib
     $libDir = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\..\Helpers\Lib"))
     $nstackDll = Join-Path $libDir "NStack.dll"
