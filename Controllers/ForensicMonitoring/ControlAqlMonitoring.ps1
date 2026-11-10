@@ -1,6 +1,9 @@
-. $PSScriptRoot\..\..\Config\Windows.ps1
-
 function controlAqlMonitoring{
+    param(
+        [int]$InitialInterval = 7,
+        [hashtable]$SharedState = $null
+    )
+
     $aqlMatrix = @{
         7  = @{
             'C' = @{ Next = 7;  Mode = 'Emergency' }
@@ -38,8 +41,17 @@ function controlAqlMonitoring{
 
     while ($true) {
         Clear-Host
+        helperBanner
 
-	helperBanner
+        $metricRowPos = 0
+        if ($null -ne $SharedState) {
+            Write-Host "`n=== LIVE ENDPOINT METRICS ===" @Net
+            Write-Host ("{0,-21} {1,-12} {2,-15} {3,-13} {4,-15}" -f "Timestamp", "CPU_Usage", "RAM_Usage", "Active_Conn", "Net_Status") @Cha
+            Write-Host ("{0,-21} {1,-12} {2,-15} {3,-13} {4,-15}" -f "---------", "---------", "---------", "-----------", "----------") @Cha
+            
+            $metricRowPos = [Console]::CursorTop
+            Write-Host "`n" 
+        }
 
         Write-Host "==========================================================" @Dim
         Write-Host "              AQL STATISTICAL DEEP MONITORING              " @Net
@@ -62,6 +74,24 @@ function controlAqlMonitoring{
         $waitTimeInSeconds = $currentInterval * 60
         
         for ($i = $waitTimeInSeconds; $i -gt 0; $i--) {
+            # === PERBAIKAN DI BLOK INI ===
+            if ($null -ne $SharedState -and $metricRowPos -gt 0 -and $SharedState.ContainsKey('Timestamp')) {
+                $currentTop = [Console]::CursorTop 
+                $currentLeft = [Console]::CursorLeft
+                
+                # Lompat ke atas
+                [Console]::SetCursorPosition(0, $metricRowPos) 
+                
+                $rowData = "{0,-21} {1,-12} {2,-15} {3,-13} {4,-15}" -f $SharedState.Timestamp, "$($SharedState.CPU) %", "$($SharedState.RAM) MB", $SharedState.Active_Conn, $SharedState.Net_Status
+                
+                # Gunakan [Console]::Write agar tidak ada karakter NewLine yang merusak buffer
+                [Console]::Write($rowData.PadRight(85))
+                
+                # Kembali ke posisi semula
+                [Console]::SetCursorPosition($currentLeft, $currentTop) 
+            }
+            # =============================
+
             Write-Progress -Activity "Monitoring AQL Running" -Status "Next Alarm in $i seconds..." -PercentComplete (($waitTimeInSeconds - $i) / $waitTimeInSeconds * 100)
             Start-Sleep -Seconds 1
         }
@@ -69,9 +99,6 @@ function controlAqlMonitoring{
 
         Write-Host "`n [!] ALARM RINGING! PLEASE ENTER THE THREAT STATUS [!]" @Pen -BackgroundColor Yellow
         
-        # ----------------------------------------------------------------------
-        # ALARM BUNYI CONTINUOUS (BACKGROUND THREAD)
-        # ----------------------------------------------------------------------
         $alarmThread = [powershell]::Create().AddScript({
             while ($true) {
                 [console]::Beep(1000, 600)
@@ -90,17 +117,23 @@ function controlAqlMonitoring{
                 Write-Host "   [H] High"     @Inc
                 Write-Host "   [M] Medium"   @Cha
                 Write-Host "   [L] Low"      @App
+                Write-Host "   [Q] Quit Session" -ForegroundColor Red
                 
-                $inputRaw = Read-Host "`n Pilihan Anda (C/H/M/L atau Critical/High/Medium/Low)"
+                $inputRaw = Read-Host "`n Pilihan Anda (C/H/M/L/Q)"
                 
                 if (-not [string]::IsNullOrWhiteSpace($inputRaw)) {
                     $severity = $inputRaw.Trim().Substring(0, 1).ToUpper()
                 }
 
+                if ($severity -eq 'Q') {
+                    Write-Host "`n[!] Menutup Sesi AQL Monitoring..." -ForegroundColor Yellow
+                    return 
+                }
+
                 if ($severity -in @('C', 'H', 'M', 'L')) {
                     $validInput = $true
                 } else {
-                    Write-Host " Pilihan tidak valid! Harap masukkan C, H, M, L atau nama statusnya." @Pen
+                    Write-Host " Pilihan tidak valid! Harap masukkan C, H, M, L atau Q untuk keluar." @Pen
                 }
             }
         }

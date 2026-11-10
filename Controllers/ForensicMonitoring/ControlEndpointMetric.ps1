@@ -1,25 +1,26 @@
-. $PSScriptRoot\..\..\Config\Windows.ps1
-
 function controlEndpointMetric{
-    # 1. Bersihkan layar dan tampilkan banner SEKALI SAJA di awal
-    Clear-Host
-    showBanner 
-    
-    Write-Host "`n=== LIVE ENDPOINT METRICS ===" @Net
-    # Menambahkan kolom Net_Status (Jaringan)
-    Write-Host "Timestamp            CPU_Usage   RAM_Usage   Active_Conn Net_Status" @Cha
-    Write-Host "---------            ---------   ---------   ----------- ----------" @Cha
+    param(
+        [switch]$SingleRun,
+        [switch]$RawDataOnly,
+        [hashtable]$SharedState = $null
+    )
 
-    # 2. Simpan posisi baris kursor saat ini (tempat data akan ditulis)
-    $dataRowPosition = [Console]::CursorTop
-    [Console]::CursorVisible = $false
+    if (-not $RawDataOnly -and $null -eq $SharedState) {
+        Clear-Host
+        showBanner 
+        
+        Write-Host "`n=== LIVE ENDPOINT METRICS ===" @Net
+        Write-Host ("{0,-21} {1,-12} {2,-15} {3,-13} {4,-15}" -f "Timestamp", "CPU_Usage", "RAM_Usage", "Active_Conn", "Net_Status") @Cha
+        Write-Host ("{0,-21} {1,-12} {2,-15} {3,-13} {4,-15}" -f "---------", "---------", "---------", "-----------", "----------") @Cha
+
+        $dataRowPosition = [Console]::CursorTop
+        [Console]::CursorVisible = $false
+    }
     
-    # Siapkan alat Ping .NET (Sangat cepat, tidak bikin loop nge-lag)
     $pingT = New-Object System.Net.NetworkInformation.Ping
 
     try {
         while ($true) {
-            # --- MULAI PENGAMBILAN DATA ---
             $cpuObj = Get-CimInstance Win32_Processor | Measure-Object -Property LoadPercentage -Average
             $cpu = if ($null -ne $cpuObj.Average) { $cpuObj.Average } else { 0 }
             
@@ -29,18 +30,14 @@ function controlEndpointMetric{
             $net = @(Get-NetTCPConnection -State Established -ErrorAction SilentlyContinue).Count
             $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
 
-            # --- CEK KELANCARAN JARINGAN (LAN / WI-FI) ---
             $netStatus = "Offline"
-            # Cari adapter yang punya akses gateway (internet)
             $activeNet = Get-NetIPConfiguration | Where-Object { $_.IPv4DefaultGateway -ne $null } | Select-Object -First 1
             
             if ($activeNet) {
-                # Tentukan namanya (Wi-Fi atau LAN)
                 $adapterName = $activeNet.InterfaceAlias
                 $netType = if ($adapterName -match "Wi-Fi|Wireless") { "WiFi" } else { "LAN" }
                 
                 try {
-                    # Tembak Ping cepat ke 8.8.8.8 dengan batas waktu 500ms (setengah detik)
                     $reply = $pingT.Send("8.8.8.8", 500)
                     if ($reply.Status -eq 'Success') {
                         $netStatus = "$netType ($($reply.RoundtripTime)ms)"
@@ -52,27 +49,47 @@ function controlEndpointMetric{
                 }
             }
 
-            # --- FORMAT DAN TAMPILKAN ---
-            $cpuStr    = "$cpu %".PadRight(11)
-            $ramStr    = "$ram MB".PadRight(11)
-            $netStr    = "$net".PadRight(11)
-            $statusStr = $netStatus.PadRight(15) # Spasi ekstra untuk kolom baru
+            if ($null -ne $SharedState) {
+                $SharedState.Timestamp   = $timestamp
+                $SharedState.CPU         = $cpu
+                $SharedState.RAM         = $ram
+                $SharedState.Active_Conn = $net
+                $SharedState.Net_Status  = $netStatus
+            } 
+            elseif ($RawDataOnly) {
+                return [pscustomobject]@{
+                    Timestamp   = $timestamp
+                    CPU         = $cpu
+                    RAM         = $ram
+                    Active_Conn = $net
+                    Net_Status  = $netStatus
+                }
+            } 
+            else {
+                $cpuStr    = "$cpu %"
+                $ramStr    = "$ram MB"
+                $netStr    = "$net"
+                $statusStr = $netStatus
 
-            # Pindahkan kursor KEMBALI ke posisi baris data lalu timpa
-            [Console]::SetCursorPosition(0, $dataRowPosition)
-            Write-Host "$timestamp  $cpuStr $ramStr $netStr $statusStr           "
+                [Console]::SetCursorPosition(0, $dataRowPosition)
+                $rowData = "{0,-21} {1,-12} {2,-15} {3,-13} {4,-15}" -f $timestamp, $cpuStr, $ramStr, $netStr, $statusStr
+                Write-Host $rowData.PadRight(85)
 
-            # Tulis pesan informasi di bawahnya
-            [Console]::SetCursorPosition(0, $dataRowPosition + 2)
-            Write-Host "Memperbarui data setiap 2 detik... (Tekan Ctrl+C untuk keluar)" @Dim
+                [Console]::SetCursorPosition(0, $dataRowPosition + 2)
+                Write-Host "Memperbarui data setiap 2 detik... (Tekan Ctrl+C untuk keluar)" @Dim
+            }
             
-            # Jeda 2 detik
+            if ($SingleRun) { break }
+            if ($null -ne $SharedState -and $SharedState.KeepRunning -eq $false) { break }
+
             Start-Sleep -Seconds 2
         }
     }
     finally {
-        [Console]::CursorVisible = $true
-        Write-Host "`n`nLive Monitoring dihentikan." @Pen
-        if ($pingT) { $pingT.Dispose() } # Bersihkan memori ping
+        if (-not $RawDataOnly -and $null -eq $SharedState) {
+            [Console]::CursorVisible = $true
+            Write-Host "`n`nLive Monitoring dihentikan." @Pen
+        }
+        if ($pingT) { $pingT.Dispose() }
     }
 }

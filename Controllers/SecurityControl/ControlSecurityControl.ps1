@@ -63,7 +63,7 @@ function controlSecurityControl{
     $win.Height = [Terminal.Gui.Dim]::Fill()
 
     # [1. HEADER]
-    $headerPanel = [Terminal.Gui.FrameView]::new(" RASAMALA BEACON - OPERATION MODULE ")
+    $headerPanel = [Terminal.Gui.FrameView]::new(" RASAMALA BEACON - SECURITY CONTROL MODULE ")
     $headerPanel.X = 0
     $headerPanel.Y = 0
     $headerPanel.Width = [Terminal.Gui.Dim]::Fill()
