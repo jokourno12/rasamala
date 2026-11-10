@@ -9,15 +9,19 @@ param(
         [switch]$CheckingRemoteSession,
 
     [switch]$OperationEndpoint,
-        [switch]$EndpointMetric,
-        [switch]$AqlMonitoring,
+        [switch]$F5Reset,
+        [switch]$CrashStabilization,
         [switch]$BrowserIsolation,
         [switch]$JavaScriptRuntime,
         [switch]$BrowserTunnel,
         [switch]$SlaInfo,
 
-    [switch]$F5Reset,
-    [switch]$CrashStabilization,
+    [switch]$EndpointMetric,
+    [switch]$AqlMonitoring,
+
+    [switch]$Log,
+
+    [switch]$Snapshot,
 
     # AQL Monitoring
     [ValidateSet(7, 14, 28, 42)]
@@ -31,16 +35,18 @@ param(
 . $PSScriptRoot\Config\Windows.ps1
 . $PSScriptRoot\Helpers\Banner.ps1
 . $PSScriptRoot\Helpers\SlaInfo.ps1
-. $PSScriptRoot\Routes\Audit.ps1
-. $PSScriptRoot\Routes\Operation.ps1
-. $PSScriptRoot\Routes\Remediation.ps1
+. $PSScriptRoot\Routes\PostureEvaluation.ps1
+. $PSScriptRoot\Routes\SecurityControl.ps1
+. $PSScriptRoot\Routes\ForensicMonitoring.ps1
+. $PSScriptRoot\Routes\RecordKeeping.ps1
+. $PSScriptRoot\Routes\BackupStrategy.ps1
 
 function showBanner {
     helperBanner
 }
 
 showBanner
-# Audit
+# PostureEvaluation
 if ($AuditEndpoint){
     routeAuditEndpoint
 }
@@ -69,17 +75,17 @@ if ($CheckingRemoteSession){
     routeCheckingRemoteSession
 }
 
-# Operation
+# SecurityControl
 if ($OperationEndpoint){
     routeOperationEndpoint
 }
 
-if ($EndpointMetric){
-    routeEndpointMetric
+if ($F5Reset){
+    routeF5Reset
 }
 
-if ($AqlMonitoring){
-    routeAqlMonitoring
+if ($CrashStabilization){
+    routeCrashStabilization
 }
 
 if ($BrowserIsolation){
@@ -95,15 +101,25 @@ if ($BrowserTunnel){
 }
 
 if ($SlaInfo){
-    helperSlaInfo -Client $Client
-    exit
+    helperSlaInfo
 }
 
-# Remediation
-if ($F5Reset){
-    routeF5Reset
+# ForensicMonitoring
+if ($EndpointMetric){
+    routeEndpointMetric
 }
 
-if ($CrashStabilization){
-    routeCrashStabilization
+if ($AqlMonitoring){
+    routeAqlMonitoring
+}
+
+# RecordKeeping
+if ($Log){
+    routeLog
+}
+
+
+# BackupStrategy
+if ($Snapshot){
+    routeSnapshot
 }
