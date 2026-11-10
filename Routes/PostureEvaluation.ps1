@@ -1,4 +1,4 @@
-. $PSScriptRoot\..\Controllers\PostureEvaluation\ControlAuditEndpoint.ps1
+. $PSScriptRoot\..\Controllers\PostureEvaluation\ControlPostureEvaluation.ps1
 . $PSScriptRoot\..\Controllers\PostureEvaluation\ControlProcessorStressTesting.ps1
 . $PSScriptRoot\..\Controllers\PostureEvaluation\ControlCheckingUpdateSystem.ps1
 . $PSScriptRoot\..\Controllers\PostureEvaluation\ControlStoragePerformanceTesting.ps1
@@ -7,8 +7,8 @@
 . $PSScriptRoot\..\Controllers\PostureEvaluation\ControlCheckingRemoteSession.ps1
 . $PSScriptRoot\..\Helpers\HelperDataEpeat.ps1
 
-function routeAuditEndpoint{
-    controlAuditEndpoint
+function routePostureEvaluation{
+    controlPostureEvaluation
 }
 
 function routeProcessorStressTesting{
