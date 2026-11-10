@@ -1,5 +1,3 @@
-. $PSScriptRoot\..\..\Config\Windows.ps1
-
 function controlJavaScriptRuntime{
     Write-Host "[Operation] Memeriksa Deno Runtime..." @Net
 

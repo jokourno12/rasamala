@@ -1,4 +1,4 @@
-. $PSScriptRoot\..\Controllers\Remediations\ControlF5Reset.ps1
+. $PSScriptRoot\..\Controllers\SecurityControl\ControlF5Reset.ps1
 . $PSScriptRoot\..\Config\Windows.ps1
 
 function middlewareF5Reset{
