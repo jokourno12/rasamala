@@ -4,28 +4,67 @@
 function controlForensicMonitoring {
     Write-Host "`n [INIT] Preparing Live Background Telemetry..." -ForegroundColor Cyan
 
-    $SharedState = [hashtable]::Synchronized(@{})
-    $SharedState.KeepRunning = $true
+    $SharedState = [hashtable]::Synchronized(@{
+        KeepRunning   = $true
+        LastError     = $null
+        TelemetryReady = $false
+    })
 
     $runspace = [runspacefactory]::CreateRunspace()
     $runspace.Open()
+
     $ps = [powershell]::Create()
     $ps.Runspace = $runspace
 
-    $ps.AddScript({
+    [void]$ps.AddScript({
         param($state, $scriptFolder)
-        . "$scriptFolder\ControlEndpointMetric.ps1"
-        controlEndpointMetric -SharedState $state
+        try {
+            $metricScript = Join-Path -Path $scriptFolder -ChildPath 'ControlEndpointMetric.ps1'
+            . $metricScript
+            $state.TelemetryReady = $true
+            controlEndpointMetric -SharedState $state
+        }
+        catch {
+            $state.LastError = $_.Exception.Message
+            $state.KeepRunning = $false
+        }
     }).AddArgument($SharedState).AddArgument($PSScriptRoot)
 
-    $null = $ps.BeginInvoke()
+    $asyncHandle = $ps.BeginInvoke()
 
-    Write-Host " [OK] Background Telemetry Active. Launching AQL..." -ForegroundColor Green
-    Start-Sleep -Seconds 2 
+    # Tunggu maksimal 3 detik sampai background script benar-benar siap (lebih adaptif daripada hardcode sleep)
+    $waitMs = 0
+    while (-not $SharedState.TelemetryReady -and $SharedState.KeepRunning -and $waitMs -lt 3000) {
+        Start-Sleep -Milliseconds 100
+        $waitMs += 100
+    }
 
-    controlAqlMonitoring -SharedState $SharedState
+    if ($SharedState.LastError) {
+        Write-Host " [ERR] Background Telemetry failed: $($SharedState.LastError)" -ForegroundColor Red
+    }
+    else {
+        Write-Host " [OK] Background Telemetry Active. Launching AQL..." -ForegroundColor Green
+    }
 
-    $SharedState.KeepRunning = $false
-    $runspace.Close()
-    $runspace.Dispose()
+    try {
+        controlAqlMonitoring -SharedState $SharedState
+    }
+    finally {
+        # Blok ini DIJAMIN tetap jalan meskipun user menekan Ctrl+C atau terjadi error
+        $SharedState.KeepRunning = $false
+
+        # Beri waktu maksimal 2 detik agar loop background berhenti secara bersih (graceful shutdown)
+        if ($asyncHandle -and -not $asyncHandle.IsCompleted) {
+            [void]$asyncHandle.AsyncWaitHandle.WaitOne(2000)
+        }
+
+        if ($ps) {
+            $ps.Stop()
+            $ps.Dispose()
+        }
+        if ($runspace) {
+            $runspace.Close()
+            $runspace.Dispose()
+        }
+    }
 }
