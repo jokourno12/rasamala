@@ -1,64 +1,83 @@
 . $PSScriptRoot\..\..\Middleware\MiddlewareBrowserIsolationLock.ps1
 . $PSScriptRoot\..\..\Config\Windows.ps1
 
-function controlBrowserIsolation{
-    # Deteksi ketersediaan Deno di sistem
-    $denoExists = Get-Command -Name "deno" -ErrorAction SilentlyContinue
+function controlBrowserIsolation {
+    # 1. Resolusi biner LLRT lintas platform dari folder Helpers\Lib di root Rasamala
+    $libDir = [System.IO.Path]::GetFullPath([System.IO.Path]::Combine($PSScriptRoot, '..', '..', 'Helpers', 'Lib'))
+    $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
+    $llrtBinName = $null
 
-    if ($denoExists) {
-        Write-Host "[*] Engine Deno terdeteksi. Menggunakan mode orkestrasi Hybrid (Deno Engine)..." -ForegroundColor Cyan
-        
-        # --- KODE KEDUA (Mode Deno) ---
-        $enginePath = Join-Path $PSScriptRoot "engine\EngineBrowserIsolation.js"
-        $lockFile   = Join-Path ([System.IO.Path]::GetTempPath()) "rasamala_session.lock"
+    if ($IsWindows -and $arch -eq 'X64') {
+        $llrtBinName = 'llrt-windows-x64-no-sdk.exe'
+    }
+    elseif ($IsLinux -and $arch -eq 'X64') {
+        $llrtBinName = 'llrt-linux-x64-no-sdk'
+    }
+    elseif ($IsMacOS -and $arch -eq 'Arm64') {
+        $llrtBinName = 'llrt-darwin-arm64-no-sdk'
+    }
+
+    $llrtPath = if ($llrtBinName) { [System.IO.Path]::Combine($libDir, $llrtBinName) } else { $null }
+    $llrtExists = $llrtPath -and (Test-Path $llrtPath)
+
+    if ($llrtExists) {
+        Write-Host "[*] Engine LLRT terdeteksi. Menggunakan mode orkestrasi Hybrid (LLRT Engine)..." -ForegroundColor Cyan
+
+        # --- MODE HYBRID (LLRT Engine) ---
+        $enginePath = [System.IO.Path]::Combine($PSScriptRoot, "engine", "EngineBrowserIsolation.js")
+        $lockFile   = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "rasamala_session.lock")
 
         if (-not (Test-Path $enginePath)) {
             Write-Error "[!] Berkas engine tidak ditemukan di: $enginePath"
             return
         }
 
+        # Pastikan izin eksekusi aktif pada biner Linux/macOS
+        if ($IsLinux -or $IsMacOS) {
+            chmod +x $llrtPath 2>$null
+        }
+
         # Bersihkan sisa lock file dari sesi yang mungkin crash sebelumnya
         if (Test-Path $lockFile) { Remove-Item -Path $lockFile -Force -ErrorAction SilentlyContinue }
 
-        $denoArgs = @(
-            "run",
-            "--allow-env",
-            "--allow-read",
-            "--allow-write",
-            "--allow-run",
+        # Pastikan argumen posisi pertama tidak kosong agar urutan argv tetap konsisten
+        $safeTargetUrl = if ([string]::IsNullOrWhiteSpace($TargetUrl)) { "about:blank" } else { $TargetUrl }
+
+        $llrtArgs = @(
             "`"$enginePath`"",
-            "`"$TargetUrl`"",
+            "`"$safeTargetUrl`"",
             "`"$lockFile`""
         )
 
         try {
-            # 1. Jalankan Deno secara asinkron murni
-            Start-Process -FilePath "deno" -ArgumentList $denoArgs -NoNewWindow
-            
-            # 2. Tunggu maksimal 5 detik sampai Deno berhasil membuat Lock File
+            # 1. Jalankan LLRT secara asinkron murni
+            Start-Process -FilePath $llrtPath -ArgumentList $llrtArgs -NoNewWindow
+
+            # 2. Tunggu maksimal 5 detik sampai LLRT berhasil membuat Lock File
             $waitCount = 0
             while (-not (Test-Path $lockFile) -and $waitCount -lt 5) {
                 Start-Sleep -Seconds 1
                 $waitCount++
             }
-            
+
             # 3. Panggil sistem pengaman sesi (In-App Lock)
             middlewareBrowserIsolationLock
-            
+
             # 4. Tahan prompt PowerShell selama Lock File masih eksis
             while (Test-Path $lockFile) {
                 Start-Sleep -Seconds 2
             }
         }
         catch {
-            Write-Warning "Terjadi kegagalan rute Deno: $_"
+            Write-Warning "Terjadi kegagalan rute LLRT: $_"
         }
-    } 
+    }
     else {
-        Write-Warning "[!] Engine Deno tidak ditemukan di endpoint ini."
+        $checkedTarget = if ($llrtPath) { $llrtPath } else { "$libDir (OS/Arch: $arch tidak didukung)" }
+        Write-Warning "[!] Engine LLRT tidak ditemukan di: $checkedTarget"
         Write-Host "[*] Memicu mode Fallback (Pure PowerShell)..." -ForegroundColor Yellow
-        
-        # --- KODE PERTAMA (Mode Pure PowerShell) ---
+
+        # --- MODE FALLBACK (Pure PowerShell) ---
         Write-Host "[*] Mempersiapkan Ruang Steril (Multi-Browser Isolation)..."
 
         # 0. Self-Healing: Bersihkan folder Rasamala_* sisa crash/mati listrik sebelumnya
@@ -79,32 +98,32 @@ function controlBrowserIsolation{
         if ($IsWindows) {
             $localApp = $env:LOCALAPPDATA
             $browserMappings = @(
-                @{ 
-                    Name = 'Chrome'; 
-                    Type = 'Chromium'; 
+                @{
+                    Name = 'Chrome';
+                    Type = 'Chromium';
                     Paths = @(
-                        "C:\Program Files\Google\Chrome\Application\chrome.exe", 
+                        "C:\Program Files\Google\Chrome\Application\chrome.exe",
                         "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
                         "$localApp\Google\Chrome\Application\chrome.exe"
-                    ) 
+                    )
                 }
-                @{ 
-                    Name = 'Brave';  
-                    Type = 'Chromium'; 
+                @{
+                    Name = 'Brave';
+                    Type = 'Chromium';
                     Paths = @(
                         "C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe",
                         "C:\Program Files (x86)\BraveSoftware\Brave-Browser\Application\brave.exe",
                         "$localApp\BraveSoftware\Brave-Browser\Application\brave.exe"
-                    ) 
+                    )
                 }
-                @{ 
-                    Name = 'Edge';   
-                    Type = 'Chromium'; 
+                @{
+                    Name = 'Edge';
+                    Type = 'Chromium';
                     Paths = @(
                         "C:\Program Files\Microsoft\Edge\Application\msedge.exe",
                         "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
                         "$localApp\Microsoft\Edge\Application\msedge.exe"
-                    ) 
+                    )
                 }
             )
         }
@@ -129,7 +148,7 @@ function controlBrowserIsolation{
             foreach ($path in $map.Paths) {
                 if (Test-Path $path) {
                     $foundBrowsers += @{ Name = $map.Name; Type = $map.Type; Path = $path }
-                    break # Ketemu satu path untuk browser ini, lanjut cari browser jenis lain
+                    break
                 }
             }
         }
@@ -175,29 +194,29 @@ while (`$true) {
 
             try {
                 if ($IsWindows) {
-                     Start-Process cmd.exe -ArgumentList "/c start /b powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -EncodedCommand $encodedCommand" -WindowStyle Hidden
-                } else {
-                     Write-Warning "Background Polling (Encoded) diformat untuk Windows."
+                    Start-Process cmd.exe -ArgumentList "/c start /b powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -EncodedCommand $encodedCommand" -WindowStyle Hidden
+                }
+                else {
+                    Write-Warning "Background Polling (Encoded) diformat untuk Windows."
                 }
                 Write-Host "      [+] Timer Polling Base64 (Cek setiap $timeoutSeconds detik) aktif untuk: $folderName"
             }
             catch {
                 Write-Warning "Gagal memasang Timer Background pada $($browser.Name)"
             }
-            # -----------------------------------------------
 
             $browserArgs = @()
             if ($browser.Type -eq 'Chromium') {
                 $browserArgs = @(
-                    "--user-data-dir=$tempDir", 
-                    "--incognito", 
-                    "--no-first-run", 
+                    "--user-data-dir=$tempDir",
+                    "--incognito",
+                    "--no-first-run",
                     "--no-default-browser-check",
-                    "--disable-extensions", 
-                    "--disable-sync", 
+                    "--disable-extensions",
+                    "--disable-sync",
                     "--disable-background-networking",
-                    "--disable-password-manager-reauthentication", 
-                    "--disable-save-password-bubble", 
+                    "--disable-password-manager-reauthentication",
+                    "--disable-save-password-bubble",
                     $TargetUrl
                 )
             }
@@ -217,7 +236,7 @@ while (`$true) {
         middlewareBrowserIsolationLock
 
         # 4. Tahan Sesi Sampai Semua Browser Tertutup
-        Write-Host "[+] Menunggu SELURUH browser ditutup sebelum pembersihan..." 
+        Write-Host "[+] Menunggu SELURUH browser ditutup sebelum pembersihan..."
         try {
             if ($activeProcesses.Count -gt 0) {
                 Wait-Process -InputObject $activeProcesses -ErrorAction SilentlyContinue
@@ -228,11 +247,11 @@ while (`$true) {
         }
 
         # 5. Pembersihan Otomatis (Cleanup Normal)
-        Write-Host "[*] Semua browser telah ditutup. Menghancurkan seluruh jejak sesi..." 
-        Start-Sleep -Seconds $TimeCleanupDelaySec 
+        Write-Host "[*] Semua browser telah ditutup. Menghancurkan seluruh jejak sesi..."
+        Start-Sleep -Seconds $TimeCleanupDelaySec
         foreach ($dir in $tempDirectories) {
             Remove-Item -Path $dir -Recurse -Force -ErrorAction SilentlyContinue
         }
-        Write-Host "[v] Sesi steril berhasil dihancurkan." 
+        Write-Host "[v] Sesi steril berhasil dihancurkan."
     }
 }
